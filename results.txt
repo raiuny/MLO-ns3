@@ -1,0 +1,2 @@
+PASS: Test Suite "lr-wpan-collision" (0.003)
+PASS: Test Case "Test the 802.15.4 collision handling" (0.002)

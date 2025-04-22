@@ -793,7 +793,7 @@ QosTxop::NotifyChannelReleased(uint8_t linkId)
 
     if (m_mode) {
         GetMsduGrouper()->SetTxopTimeEnd(Simulator::Now().GetMicroSeconds(), linkId);
-        // SetTxopLimit(MicroSeconds(m_alg_txop_limits[linkId]) * 32, linkId);
+        if(GetMsduGrouper()->IsParamUpdateEnabled()) SetTxopLimit(MicroSeconds(m_alg_txop_limits[linkId]) * 32, linkId);
     }
 
 }
@@ -1074,38 +1074,40 @@ QosTxop::ScheduleUpdateEdcaParameters(Time period)
             Simulator::Schedule(period, &QosTxop::ScheduleUpdateEdcaParameters, this, period);
             return;
         }
-        // CWmin, CWmax
-        // SetMinCws(next_params["CWmins"]);
-        // SetMaxCws(next_params["CWmaxs"]);
+        if (GetMsduGrouper()->IsParamUpdateEnabled()) {
+            // CWmin, CWmax
+            SetMinCws(next_params["CWmins"]);
+            SetMaxCws(next_params["CWmaxs"]);
 
-        // // TxopLimits
-        // m_alg_txop_limits = next_params["TxopLimits"];
+            // TxopLimits
+            m_alg_txop_limits = next_params["TxopLimits"];
 
-        // // Aifsns
-        // SetAifsns(std::vector<uint8_t>(next_params["Aifsns"].begin(), next_params["Aifsns"].end()));
+            // Aifsns
+            SetAifsns(std::vector<uint8_t>(next_params["Aifsns"].begin(), next_params["Aifsns"].end()));
 
-        // // RTS/CTS 开启关闭
-        // for (uint8_t i = 0; i < 2; ++ i) {
-        //     if (next_params["RTS_CTS"][i])
-        //         m_mac->GetWifiRemoteStationManager(i)->SetRtsCtsThreshold(0);
-        //     else m_mac->GetWifiRemoteStationManager(i)->SetRtsCtsThreshold(std::numeric_limits<uint32_t>::max());
-        // }
+            // RTS/CTS 开启关闭
+            for (uint8_t i = 0; i < 2; ++ i) {
+                if (next_params["RTS_CTS"][i])
+                    m_mac->GetWifiRemoteStationManager(i)->SetRtsCtsThreshold(0);
+                else m_mac->GetWifiRemoteStationManager(i)->SetRtsCtsThreshold(std::numeric_limits<uint32_t>::max());
+            }
 
-        // // 聚合参数
+            // 聚合参数
 
-        // // m_mac->SetAttribute("BE_MaxAmpduSize", UintegerValue(65536));
+            // m_mac->SetAttribute("BE_MaxAmpduSize", UintegerValue(65536));
 
-        // // 重传次数
-        // for (uint8_t i = 0; i < 2; ++ i) {
-        //     m_mac->GetWifiRemoteStationManager(i)->SetMaxSlrc(params["MaxSlrcs"][i]); // 7
-        //     m_mac->GetWifiRemoteStationManager(i)->SetMaxSsrc(params["MaxSsrcs"][i]); // 4
-        // }
-    
-        // // 冗余参数
-        // GetMsduGrouper()->UpdateRedundancyThreshold(next_params["RedundancyThresholds"]);
+            // 重传次数
+            for (uint8_t i = 0; i < 2; ++ i) {
+                m_mac->GetWifiRemoteStationManager(i)->SetMaxSlrc(params["MaxSlrcs"][i]); // 7
+                m_mac->GetWifiRemoteStationManager(i)->SetMaxSsrc(params["MaxSsrcs"][i]); // 4
+            }
+        
+            // 冗余参数
+            GetMsduGrouper()->UpdateRedundancyThreshold(next_params["RedundancyThresholds"]);
 
-        // GetMsduGrouper()->UpdateRedundancyFixedNumber(next_params["RedundancyFixedNumbers"][0]);
+            GetMsduGrouper()->UpdateRedundancyFixedNumber(next_params["RedundancyFixedNumbers"][0]);
 
+        }
         GetMsduGrouper()->ClearStats();
     } else {
         std::unordered_map<std::string, std::vector<uint32_t>> params = GetMsduGrouper()->GetNewEdcaParameters();

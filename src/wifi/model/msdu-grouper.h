@@ -309,11 +309,15 @@ public:
 
     bool IsGridSearchEnabled();
 
+    bool IsParamUpdateEnabled();
+
     void UpdateRedundancyThreshold(std::vector<uint32_t> const thresholds);
 
     void UpdateRedundancyFixedNumber(uint32_t const n);
 
     void EnableGridSearch(std::string filename);
+     
+    void EnableParamUpdate();
 
     std::unordered_map<std::string, std::vector<uint32_t>> GetNewEdcaParameters();
     
@@ -389,6 +393,7 @@ private:
     /* Gride Search */
     Ptr<GridSearch> m_gs; // 用于周期性搜索最优参数
     bool m_gs_enable; // 是否开启最优参数搜索
+    bool m_param_update;
     std::unordered_map<std::string, std::vector<uint32_t>> m_current_params;
 
 };

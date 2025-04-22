@@ -241,9 +241,9 @@ main(int argc, char* argv[])
     uint32_t seedNumber = 1;
 
     uint32_t mcs1 = 6;
-    uint32_t mcs2 = 11;
+    uint32_t mcs2 = 13;
     uint32_t bw1 = 20;
-    uint32_t bw2 = 40;
+    uint32_t bw2 = 160;
     double r1 = 1.0;
     double r2 = 0.0000001;
     uint32_t ch1 = 0;
@@ -258,7 +258,7 @@ main(int argc, char* argv[])
 
     uint32_t txoplimit1 = 0, txoplimit2 = 0;
     uint32_t singleLink = 0;
-    uint32_t infer = 0x03;
+    uint32_t inference = 0x00;
     uint32_t period1 = 3;
     bool grid_search_enable = true;
     uint32_t nss = 1;
@@ -287,7 +287,7 @@ main(int argc, char* argv[])
     cmd.AddValue("txop2", "TxopLimit on 5 G", txoplimit2);
     cmd.AddValue("sl", "Single Link if > 0", singleLink);
     cmd.AddValue("nss", "mimo", nss);
-    cmd.AddValue("inference", "inference setting", infer);
+    cmd.AddValue("inference", "inference setting", inference);
     cmd.Parse(argc, argv);
 
     Time period{Seconds(period1)};
@@ -311,7 +311,7 @@ main(int argc, char* argv[])
     Time simulationTime{Seconds(simT)};
     std::string dlAckSeqType{"NO-OFDMA"};
     size_t nStaMlds{1};
-    std::vector<size_t> nStaSlds{1, 1};
+    std::vector<size_t> nStaSlds{inference & 0x01, inference & 0x02};
     uint32_t payloadSize = 700; // must fit in the max TX duration when transmitting at MCS 0 over an RU of 26 tones
     Time accessReqInterval{0};
     uint32_t maxGroupSize = 1;
@@ -489,19 +489,29 @@ main(int argc, char* argv[])
     Ssid obssSsid5 = Ssid("AP-5G");
     // 1. STA MAC 设置
     mac.SetType("ns3::StaWifiMac",
-                "Ssid", SsidValue(bssSsid),
-                "ActiveProbing", BooleanValue(false));
+                "Ssid",
+                SsidValue(bssSsid),
+                "ActiveProbing",
+                BooleanValue(false));
     mldDev = wifi.Install(phy, mac, mldNodes);
-
-    mac.SetType("ns3::StaWifiMac",
-                "Ssid", SsidValue(obssSsid2),
-                "ActiveProbing", BooleanValue(false));
-    sldDev2 = wifi2.Install(phySld2, mac, sldNodes2);
-
-    mac.SetType("ns3::StaWifiMac",
-                "Ssid", SsidValue(obssSsid5),
-                "ActiveProbing", BooleanValue(false));
-    sldDev5 = wifi5.Install(phySld5, mac, sldNodes5);
+    if (inference & 0x01)
+    {
+        mac.SetType("ns3::StaWifiMac",
+                    "Ssid",
+                    SsidValue(obssSsid2),
+                    "ActiveProbing",
+                    BooleanValue(false));
+        sldDev2 = wifi2.Install(phySld2, mac, sldNodes2);
+    }
+    if (inference & 0x02)
+    {
+        mac.SetType("ns3::StaWifiMac",
+                    "Ssid",
+                    SsidValue(obssSsid5),
+                    "ActiveProbing",
+                    BooleanValue(false));
+        sldDev5 = wifi5.Install(phySld5, mac, sldNodes5);
+    }
 
     // print mac address of mld 
     Ptr<WifiMac> mac1 = DynamicCast<WifiNetDevice>(mldDev.Get(0))->GetMac();
@@ -519,7 +529,7 @@ main(int argc, char* argv[])
             if (i == 0) mac_sld = DynamicCast<WifiNetDevice>(sldDev2.Get(j))->GetMac();
             else mac_sld = DynamicCast<WifiNetDevice>(sldDev5.Get(j))->GetMac();
             auto fem = mac_sld->GetFrameExchangeManager();
-            std::cout << "\t SLD-" << j << ": " << fem->GetAddress() << std::endl;
+            std::cout << "\t SLD-" << j + 1 << ": " << fem->GetAddress() << std::endl;
         }
     }
     // 2. AP MAC 设置
@@ -529,19 +539,20 @@ main(int argc, char* argv[])
                 "EnableBeaconJitter", BooleanValue(false),
                 "Ssid", SsidValue(bssSsid));
     apDev = wifi.Install(phy, mac, apNodes.Get(0));
-    
-    mac.SetType("ns3::ApWifiMac",
-                "BeaconInterval", TimeValue(MicroSeconds(beaconInterval)),
-                "EnableBeaconJitter", BooleanValue(false),
-                "Ssid", SsidValue(obssSsid2));
-    apDev.Add(wifi2.Install(phySld2, mac, apNodes.Get(1)));
-    
-    mac.SetType("ns3::ApWifiMac",
-                "BeaconInterval", TimeValue(MicroSeconds(beaconInterval)),
-                "EnableBeaconJitter", BooleanValue(false),
-                "Ssid", SsidValue(obssSsid5));               
-    apDev.Add(wifi5.Install(phySld5, mac, apNodes.Get(2)));
-
+    if (inference & 0x01) {
+        mac.SetType("ns3::ApWifiMac",
+                    "BeaconInterval", TimeValue(MicroSeconds(beaconInterval)),
+                    "EnableBeaconJitter", BooleanValue(false),
+                    "Ssid", SsidValue(obssSsid2));
+        apDev.Add(wifi2.Install(phySld2, mac, apNodes.Get(1)));
+    }
+    if (inference & 0x02) {
+        mac.SetType("ns3::ApWifiMac",
+                    "BeaconInterval", TimeValue(MicroSeconds(beaconInterval)),
+                    "EnableBeaconJitter", BooleanValue(false),
+                    "Ssid", SsidValue(obssSsid5));               
+        apDev.Add(wifi5.Install(phySld5, mac, apNodes.Get(2)));
+    }
     // print mac address of ap
     std::cout << "AP0 MAC: " << apDev.Get(0)->GetAddress()<< std::endl;
     Ptr<WifiMac> mac2 = DynamicCast<WifiNetDevice>(apDev.Get(0))->GetMac();
@@ -549,12 +560,14 @@ main(int argc, char* argv[])
         auto fem = mac2->GetFrameExchangeManager(i);
         std::cout << "\t apDevice " << "linkId " << std::to_string(i) << " mac address: " << fem->GetAddress() << std::endl;
     }
-    std::cout << "AP1 MAC: " << apDev.Get(1)->GetAddress()<< std::endl;
-    std::cout << "AP2 MAC: " << apDev.Get(2)->GetAddress()<< std::endl;
+    if (inference & 0x01) {
+        std::cout << "AP1 MAC: " << apDev.Get(1)->GetAddress()<< std::endl;
+        DynamicCast<WifiNetDevice>(apDev.Get(1))->GetPhy(0)->TraceConnectWithoutContext("PpduTxDuration",MakeCallback(&NotifyPpduTxDurationOBSS));
+    }
+    if (inference & 0x02) std::cout << "AP2 MAC: " << apDev.Get(2)->GetAddress()<< std::endl;
 
     DynamicCast<WifiNetDevice>(apDev.Get(0))->GetPhy(0)->TraceConnectWithoutContext("PpduTxDuration",MakeCallback(&NotifyPpduTxDurationMLD));
     DynamicCast<WifiNetDevice>(apDev.Get(0))->GetPhy(1)->TraceConnectWithoutContext("PpduTxDuration",MakeCallback(&NotifyPpduTxDurationMLD));
-    DynamicCast<WifiNetDevice>(apDev.Get(1))->GetPhy(0)->TraceConnectWithoutContext("PpduTxDuration",MakeCallback(&NotifyPpduTxDurationOBSS));
     NetDeviceContainer devices;
     devices.Add(apDev);
     devices.Add(mldDev);
@@ -586,9 +599,9 @@ main(int argc, char* argv[])
     Rng->SetAttribute ("Max", DoubleValue (10));
     mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
     
-    std::vector<double> distance = {0, 1e6, 1e6};
-    if (infer & 0x01) distance[1] = 2;
-    if (infer & 0x02) distance[2] = 2;
+    std::vector<double> distance = {0, 1e3, 1e3};
+    if (inference & 0x01) distance[1] = 5;
+    if (inference & 0x02) distance[2] = 5;
     positionAlloc->Add(Vector(distance[0], 0.0, 0.0)); // AP 0
     positionAlloc->Add(Vector(distance[1], 0.0, 0.0)); // AP 1
     positionAlloc->Add(Vector(0.0, distance[2], 0.0)); // AP 2
@@ -612,27 +625,33 @@ main(int argc, char* argv[])
     address.SetBase("10.0.0.0", "255.255.255.0");
     Ipv4InterfaceContainer apNodeInterface = address.Assign(apDev.Get(0));
     Ipv4InterfaceContainer mldNodeInterface = address.Assign(mldDev);
-
-    address.SetBase("10.0.1.0", "255.255.255.0");
-    Ipv4InterfaceContainer apNodeInterface2 = address.Assign(apDev.Get(1));
-    Ipv4InterfaceContainer sldNodeInterface2 = address.Assign(sldDev2);
-    address.SetBase("10.0.2.0", "255.255.255.0");
-    Ipv4InterfaceContainer apNodeInterface5 = address.Assign(apDev.Get(2));
-    Ipv4InterfaceContainer sldNodeInterface5 = address.Assign(sldDev5);
-    // print Ip address of devices
+    Ipv4InterfaceContainer apNodeInterface2;
+    Ipv4InterfaceContainer sldNodeInterface2;
+    Ipv4InterfaceContainer apNodeInterface5;
+    Ipv4InterfaceContainer sldNodeInterface5;
     std::cout << "AP0 IP: " << apNodeInterface.GetAddress(0) << std::endl;
-    std::cout << "AP1 IP: " << apNodeInterface2.GetAddress(0) << std::endl;
-    std::cout << "AP2 IP: " << apNodeInterface5.GetAddress(0) << std::endl;
-    std::cout << "STA IP: " << std::endl;
     for (size_t i = 0; i < nStaMlds; ++i) {
         std::cout << "  MLD-" << std::to_string(i) + ": " << mldNodeInterface.GetAddress(i) << std::endl;
     }
-    for (size_t i = 0; i < nStaSlds[0];  ++i) {
-        std::cout << "  Link 0 SLD-" << std::to_string(i) + ": " << sldNodeInterface2.GetAddress(i) << std::endl;
+    if (inference & 0x01) {
+        address.SetBase("10.0.1.0", "255.255.255.0");
+        apNodeInterface2 = address.Assign(apDev.Get(1));
+        sldNodeInterface2 = address.Assign(sldDev2);
+        std::cout << "AP1 IP: " << apNodeInterface2.GetAddress(0) << std::endl;
+        for (size_t i = 0; i < nStaSlds[0];  ++i) {
+            std::cout << "  Link 0 SLD-" << std::to_string(i) + ": " << sldNodeInterface2.GetAddress(i) << std::endl;
+        }
     }
-    for (size_t i = 0; i < nStaSlds[1];  ++i) {
-        std::cout << "  Link 1 SLD-" << std::to_string(i) + ": " << sldNodeInterface5.GetAddress(i) << std::endl;
+    if (inference & 0x02) {
+        address.SetBase("10.0.2.0", "255.255.255.0");
+        apNodeInterface5 = address.Assign(apDev.Get(2));
+        sldNodeInterface5 = address.Assign(sldDev5);
+        std::cout << "AP2 IP: " << apNodeInterface5.GetAddress(0) << std::endl;
+        for (size_t i = 0; i < nStaSlds[1];  ++i) {
+            std::cout << "  Link 1 SLD-" << std::to_string(i) + ": " << sldNodeInterface5.GetAddress(i) << std::endl;
+        }
     }
+
     /* Setting applications */
     ApplicationContainer dlserverApp;
     ApplicationContainer dlserverAppObss2;
@@ -647,16 +666,18 @@ main(int argc, char* argv[])
     dlserverApp.Start(Seconds(0.0));
     dlserverApp.Stop(simulationTime + Seconds(3.0));
 
-    dlserverAppObss2 = server.Install(sldNodes2);
-    seedNumber += server.AssignStreams(sldNodes2, seedNumber);
-    dlserverAppObss2.Start(Seconds(0.2));
-    dlserverAppObss2.Stop(simulationTime + Seconds(3.0));
-
-    dlserverAppObss5 = server.Install(sldNodes5);
-    seedNumber += server.AssignStreams(sldNodes5, seedNumber);
-    dlserverAppObss5.Start(Seconds(0.4));
-    dlserverAppObss5.Stop(simulationTime + Seconds(3.0));
-
+    if (inference & 0x01) {
+        dlserverAppObss2 = server.Install(sldNodes2);
+        seedNumber += server.AssignStreams(sldNodes2, seedNumber);
+        dlserverAppObss2.Start(Seconds(0.2));
+        dlserverAppObss2.Stop(simulationTime + Seconds(3.0));
+    }
+    if (inference & 0x02) {
+        dlserverAppObss5 = server.Install(sldNodes5);
+        seedNumber += server.AssignStreams(sldNodes5, seedNumber);
+        dlserverAppObss5.Start(Seconds(0.4));
+        dlserverAppObss5.Stop(simulationTime + Seconds(3.0));
+    }
     // AP 0
     const auto maxLoad2 = EhtPhy::GetDataRate(mcs[0], bandwidth[0] , NanoSeconds(gi), 1) * nss;
     const auto maxLoad5 = EhtPhy::GetDataRate(mcs[1], bandwidth[1] , NanoSeconds(gi), 1) * nss;
@@ -673,30 +694,30 @@ main(int argc, char* argv[])
     clientApp.Stop(simulationTime + Seconds(3.0));
 
     // AP 1
-    auto packetInterval2 = payloadSize * 8.0 / (maxLoad2 * r1);
-    if (!(infer & 0x01)) packetInterval2 = 1e9;
-    UdpClientHelper client1(sldNodeInterface2.GetAddress(0), port);
-    client1.SetAttribute("MaxPackets", UintegerValue(0));
-    client1.SetAttribute("Interval", TimeValue(Seconds(packetInterval2)));
-    client1.SetAttribute("PacketSize", UintegerValue(payloadSize));
-    ApplicationContainer clientApp1 = client1.Install(apNodes.Get(1));
-    seedNumber += client1.AssignStreams(apNodes.Get(1), seedNumber);
-    clientApp1.Start(Seconds(1.0));
-    clientApp1.Stop(simulationTime + Seconds(3.0));
-
+    if (inference & 0x01) {
+        auto packetInterval2 = payloadSize * 8.0 / (maxLoad2 * r1);
+        UdpClientHelper client1(sldNodeInterface2.GetAddress(0), port);
+        client1.SetAttribute("MaxPackets", UintegerValue(0));
+        client1.SetAttribute("Interval", TimeValue(Seconds(packetInterval2)));
+        client1.SetAttribute("PacketSize", UintegerValue(payloadSize));
+        ApplicationContainer clientApp1 = client1.Install(apNodes.Get(1));
+        seedNumber += client1.AssignStreams(apNodes.Get(1), seedNumber);
+        clientApp1.Start(Seconds(1.0));
+        clientApp1.Stop(simulationTime + Seconds(3.0));
+    }
     // AP 2
-    auto packetInterval5 = payloadSize * 8.0 / (maxLoad5 * r2);
-    if (!(infer & 0x02)) packetInterval5 = 1e9;
-    UdpClientHelper client2(sldNodeInterface5.GetAddress(0), port);
-    // client2.SetAttribute("MaxPackets", UintegerValue(0));
-    client2.SetAttribute("MaxPackets", UintegerValue(1));
-    client2.SetAttribute("Interval", TimeValue(Seconds(packetInterval5)));
-    client2.SetAttribute("PacketSize", UintegerValue(payloadSize));
-    ApplicationContainer clientApp2 = client2.Install(apNodes.Get(2));
-    seedNumber += client2.AssignStreams(apNodes.Get(2), seedNumber);
-    clientApp2.Start(Seconds(1.0));
-    clientApp2.Stop(simulationTime + Seconds(3.0));
-
+    if (inference & 0x02) {
+        auto packetInterval5 = payloadSize * 8.0 / (maxLoad5 * r2);
+        UdpClientHelper client2(sldNodeInterface5.GetAddress(0), port);
+        // client2.SetAttribute("MaxPackets", UintegerValue(0));
+        client2.SetAttribute("MaxPackets", UintegerValue(1));
+        client2.SetAttribute("Interval", TimeValue(Seconds(packetInterval5)));
+        client2.SetAttribute("PacketSize", UintegerValue(payloadSize));
+        ApplicationContainer clientApp2 = client2.Install(apNodes.Get(2));
+        seedNumber += client2.AssignStreams(apNodes.Get(2), seedNumber);
+        clientApp2.Start(Seconds(1.0));
+        clientApp2.Stop(simulationTime + Seconds(3.0));
+    }
     // Enable TID-to-Link Mapping for AP and MLD STAs
     for (auto i = mldDev.Begin(); i != mldDev.End(); ++i)
     {
@@ -724,6 +745,7 @@ main(int argc, char* argv[])
     Config::Set("/NodeList/0/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/Period", TimeValue(period));
     Config::Set("/NodeList/0/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/Mode", UintegerValue(mode));
     Config::Set("/NodeList/0/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/GridSearchEnable", BooleanValue(grid_search_enable));
+    Config::Set("/NodeList/0/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/ParamUpdate", BooleanValue(false));
     Config::Set("/NodeList/0/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/GridSearchParameter", StringValue("./scratch/params.json"));
 
 

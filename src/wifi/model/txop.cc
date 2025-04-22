@@ -172,12 +172,19 @@ Txop::GetTypeId()
                 MakeBooleanAccessor(&Txop::m_gs_enable),
                 MakeBooleanChecker()
                 )
+            .AddAttribute("ParamUpdate",
+                "GridSearch to Update Params",
+                BooleanValue(false),
+                MakeBooleanAccessor(&Txop::m_param_update),
+                MakeBooleanChecker()
+                )
             .AddAttribute("GridSearchParameter",
                 "GridSearchParameter Setting",
                 StringValue("./scratch/params.json"),
                 MakeStringAccessor(&Txop::m_jsonFileName),
                 MakeStringChecker()
                 )
+
             .AddAttribute("Period",
                 "Stats Period Setting",
                 TimeValue(Seconds(3.0)),
@@ -768,6 +775,7 @@ Txop::DoInitialize()
     if (m_mode) {
         m_grouper = Create<MsduGrouper>(m_maxGroupSize, 4096, m_queue, m_mac, m_mode, m_period);
         if (m_gs_enable) m_grouper->EnableGridSearch(m_jsonFileName);
+        if (m_param_update) m_grouper->EnableParamUpdate();
     }
      
 }

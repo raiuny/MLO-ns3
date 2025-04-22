@@ -582,7 +582,8 @@ class Txop : public Object
     
     uint32_t m_mode;
     bool m_gs_enable;
-
+    bool m_param_update;
+    
   private:
     /**
      * Create a LinkEntity object.

@@ -343,6 +343,8 @@ MsduGrouper::MsduGrouper(uint32_t maxGroupSize,
     m_RedundantPacketCnt = {0, 0};
     m_redundancyFixedNumber = 0;
     m_inflighted = {0, 0};
+    m_gs_enable = false;
+    m_param_update = false;
 }
 
 MsduGrouper::~MsduGrouper()
@@ -832,6 +834,12 @@ MsduGrouper::IsGridSearchEnabled()
     return m_gs_enable && m_mode;
 }
 
+bool
+MsduGrouper::IsParamUpdateEnabled()
+{
+    return m_param_update && m_mode;
+}
+
 void
 MsduGrouper::UpdateRedundancyFixedNumber(const uint32_t n)
 {
@@ -841,8 +849,13 @@ MsduGrouper::UpdateRedundancyFixedNumber(const uint32_t n)
 void
 MsduGrouper::EnableGridSearch(std::string filename)
 {
-    m_gs_enable = 1;
+    m_gs_enable = true;
     m_gs = new GridSearch(filename);
+}
+
+void 
+MsduGrouper::EnableParamUpdate() {
+    m_param_update = true;
 }
 
 void

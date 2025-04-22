@@ -3,5 +3,7 @@
 __pycache__
 *.pcap
 *.log
+*.png
+*.csv
 
 /cmake-cache/

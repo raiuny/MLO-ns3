@@ -202,6 +202,8 @@ class OriginatorBlockAckAgreement : public BlockAckAgreement
      */
     bool AllAckedMpdusInTxWindow(const std::set<uint16_t>& seqNumbers) const;
 
+    std::vector<uint16_t> m_linkRPtr;
+
   private:
     /**
      * Advance the transmit window so that the starting sequence number is the

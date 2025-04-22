@@ -1603,7 +1603,7 @@ WifiPhy::CalculateTxDuration(const WifiConstPsduMap& psduMap,
 
 Time WifiPhy::CalculateTransmissionDelay(bool IsAggregation, size_t maxMpduCount, size_t maxMsduCount) {
     Time transmissionDelay = NanoSeconds(0); 
-    // IsAggregation = false;
+    IsAggregation = false;
     if (IsAggregation && WifiPhyBand::WIFI_PHY_BAND_2_4GHZ) {
         double delayInMicroseconds = 2 + (maxMpduCount * maxMsduCount * 32.0) / 3000.0 + maxMpduCount / 320.0 + 1.5;
         transmissionDelay = NanoSeconds(static_cast<int64_t>(delayInMicroseconds * 1000));  
@@ -1814,6 +1814,13 @@ WifiPhy::Send(Ptr<const WifiPsdu> psdu, const WifiTxVector& txVector)
 }
 
 void
+WifiPhy::Send(Ptr<const WifiPsdu> psdu, const WifiTxVector& txVector, uint8_t linkId, std::vector<bool>& linkStatus)
+{
+    NS_LOG_FUNCTION(this << *psdu << txVector);
+    Send(GetWifiConstPsduMap(psdu, txVector), txVector, linkId, linkStatus);
+}
+
+void
 WifiPhy::Send(const WifiConstPsduMap& psdus, const WifiTxVector& txVector)
 {
     NS_LOG_FUNCTION(this << psdus << txVector);
@@ -1956,6 +1963,167 @@ WifiPhy::Send(const WifiConstPsduMap& psdus, const WifiTxVector& txVector)
 
     m_channelAccessRequested = false;
     m_powerRestricted = false;
+}
+
+void
+WifiPhy::Send(const WifiConstPsduMap& psdus, const WifiTxVector& txVector, uint8_t linkId, std::vector<bool>& linkStatus)
+{
+    NS_LOG_FUNCTION(this << psdus << txVector);
+    /* Transmission can happen if:
+     *  - we are syncing on a packet. It is the responsibility of the
+     *    MAC layer to avoid doing this but the PHY does nothing to
+     *    prevent it.
+     *  - we are idle
+     */
+    NS_ASSERT(!m_state->IsStateTx() && !m_state->IsStateSwitching());
+    NS_ASSERT(m_endTxEvent.IsExpired());
+
+    if (!txVector.IsValid(m_band))
+    {
+        NS_FATAL_ERROR("TX-VECTOR is invalid!");
+    }
+
+    uint8_t nss = 0;
+    if (txVector.IsMu())
+    {
+        // We do not support mixed OFDMA and MU-MIMO
+        if (txVector.IsDlMuMimo())
+        {
+            nss = txVector.GetNssTotal();
+        }
+        else
+        {
+            nss = txVector.GetNssMax();
+        }
+    }
+    else
+    {
+        nss = txVector.GetNss();
+    }
+
+    if (nss > GetMaxSupportedTxSpatialStreams())
+    {
+        NS_FATAL_ERROR("Unsupported number of spatial streams!");
+    }
+
+    if (m_state->IsStateSleep())
+    {
+        NS_LOG_DEBUG("Dropping packet because in sleep mode");
+        for (const auto& psdu : psdus)
+        {
+            NotifyTxDrop(psdu.second);
+        }
+        return;
+    }
+    
+    const auto txDuration = CalculateTxDuration(psdus, txVector, GetPhyBand());
+
+    size_t maxMpduCount = 0;
+    size_t maxMsduCount = 0;
+    // 遍历 WifiConstPsduMap，获得最大的聚合数量
+    auto firstPsdu = psdus.cbegin()->second;
+    maxMpduCount = firstPsdu->GetNMpdus();
+    maxMsduCount = firstPsdu->GetNMsdus();
+    Time transmissionDelay = CalculateTransmissionDelay(txVector.IsAggregation(), maxMpduCount, maxMsduCount);
+    // if(transmissionDelay != MicroSeconds(0))
+    // {
+    //     std::cout<<"maxMpduCount: "<<maxMpduCount<<std::endl;
+    //     std::cout<<"maxMsduCount: "<<maxMsduCount<<std::endl;
+    //     std::cout<<"Transmit delay is " << transmissionDelay.As(Time::US)<<std::endl;
+    // } // cmm
+    
+    auto noEndPreambleDetectionEvent = true;
+    for (const auto& [mc, entity] : m_phyEntities)
+    {
+        noEndPreambleDetectionEvent =
+            noEndPreambleDetectionEvent && entity->NoEndPreambleDetectionEvents();
+    }
+    if (!noEndPreambleDetectionEvent && !m_currentEvent)
+    {
+        // PHY is in the initial few microseconds during which the
+        // start of RX has occurred but the preamble detection period
+        // has not elapsed
+        AbortCurrentReception(SIGNAL_DETECTION_ABORTED_BY_TX);
+    }
+    else if (!noEndPreambleDetectionEvent || m_currentEvent)
+    {
+        AbortCurrentReception(RECEPTION_ABORTED_BY_TX);
+    }
+
+    if (m_powerRestricted)
+    {
+        NS_LOG_DEBUG("Transmitting with power restriction for " << txDuration.As(Time::NS));
+    }
+    else
+    {
+        NS_LOG_DEBUG("Transmitting without power restriction for " << txDuration.As(Time::NS));
+    }
+
+    if (m_state->GetState() == WifiPhyState::OFF)
+    {
+        NS_LOG_DEBUG("Transmission canceled because device is OFF");
+        return;
+    }
+
+    auto ppdu = GetPhyEntity(txVector.GetModulationClass())->BuildPpdu(psdus, txVector, txDuration);
+    m_previouslyRxPpduUid = UINT64_MAX; // reset (after creation of PPDU) to use it only once
+
+    const auto txPower = DbmToW(GetTxPowerForTransmission(ppdu) + GetTxGain());
+    // Simulator::Schedule(transmissionDelay,&WifiPhy::NotifyTxBegin,this,psdus,txPower);
+    NotifyTxBegin(psdus, txPower); // 传输开始，此后发送时延，然后正式传输
+    TxBeginUpdateLinkTxStatus(linkId, linkStatus);
+    if (!m_phyTxPsduBeginTrace.IsEmpty())
+    {
+        m_phyTxPsduBeginTrace(psdus, txVector, txPower);
+    }
+    for (const auto& psdu : psdus)
+    {
+        NotifyMonitorSniffTx(psdu.second, GetFrequency(), txVector, psdu.first);
+    }
+    m_state->SwitchToTx(txDuration + transmissionDelay, psdus, GetPower(txVector.GetTxPowerLevel()), txVector);
+    // Simulator::Schedule(transmissionDelay,
+    //     &WifiPhyStateHelper::SwitchToTx,  
+    //     m_state,          
+    //     txDuration,       
+    //     psdus,            
+    //     GetPower(txVector.GetTxPowerLevel()), 
+    //     txVector);      
+    if (m_wifiRadioEnergyModel &&
+        m_wifiRadioEnergyModel->GetMaximumTimeInState(WifiPhyState::TX) < txDuration)
+    {
+        ppdu->SetTruncatedTx();
+    }
+
+    // 改变时间，加上发送延迟后才完成传输
+    m_endTxEvent =
+        Simulator::Schedule(txDuration + transmissionDelay, &WifiPhy::TxDone, this, psdus);
+
+    Simulator::Schedule(txDuration, &WifiPhy::TxDoneUpdateLinkTxStatus, this, linkId, std::ref(linkStatus));
+
+    if(!PpduTxDuration.IsEmpty())
+    {
+        uint8_t linkId = m_band == WifiPhyBand::WIFI_PHY_BAND_2_4GHZ ? 0 : 1;
+        PpduTxDuration(ppdu,txDuration, linkId);
+    }
+    // Schedule the StartTx call after the transmission delay
+    // Simulator::Schedule(transmissionDelay, &WifiPhy::StartTx, this, ppdu);
+    StartTx(ppdu);
+    ppdu->ResetTxVector();
+
+    m_channelAccessRequested = false;
+    m_powerRestricted = false;
+}
+
+void
+WifiPhy::TxBeginUpdateLinkTxStatus(uint8_t linkId, std::vector<bool>& linkStatus)
+{
+   linkStatus[linkId] = true;
+}
+
+void
+WifiPhy::TxDoneUpdateLinkTxStatus(uint8_t linkId, std::vector<bool>& linkStatus)
+{   
+    linkStatus[linkId] = false;
 }
 
 void

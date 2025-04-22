@@ -36,7 +36,8 @@ RecipientBlockAckAgreement::RecipientBlockAckAgreement(Mac48Address originator,
                                                        uint16_t bufferSize,
                                                        uint16_t timeout,
                                                        uint16_t startingSeq,
-                                                       bool htSupported)
+                                                       bool htSupported,
+                                                       uint32_t mode)
     : BlockAckAgreement(originator, tid)
 {
     NS_LOG_FUNCTION(this << originator << amsduSupported << +tid << bufferSize << timeout
@@ -47,8 +48,13 @@ RecipientBlockAckAgreement::RecipientBlockAckAgreement(Mac48Address originator,
     m_timeout = timeout;
     m_startingSeq = startingSeq;
     m_htSupported = htSupported;
-    // std::cout << "RecipientBlockAckAgreement: " << std::to_string(m_startingSeq) << " m_bufferSize: " << std::to_string(m_bufferSize) << std::endl;
+    std::cout << "RecipientBlockAckAgreement: " << std::to_string(m_startingSeq) << " originator:" << originator << " m_bufferSize: " << std::to_string(m_bufferSize) << std::endl;
     m_scoreboard.Init(startingSeq, bufferSize);
+    m_scoreboard_asyn.resize(2);
+    for (auto & board : m_scoreboard_asyn) {
+        board.Init(startingSeq, bufferSize);
+    }
+    m_mode = mode;
     m_winStartB = startingSeq;
     m_winSizeB = bufferSize;
 }
@@ -109,81 +115,117 @@ RecipientBlockAckAgreement::PassBufferedMpdusWithSeqNumberLessThan(uint16_t newW
     }
     m_winStartB = newWinStartB;
 }
-bool 
-RecipientBlockAckAgreement::check_scoreboard_if_full_one() {
-    auto st = m_scoreboard.GetWinStart();
-    for (auto i = 0; i < 64; i++) {
-        if (!m_scoreboard.At(i))  return false;
-    }
-    // std::cout << std::endl;
-    return true;
-}
+
 void
-RecipientBlockAckAgreement::NotifyReceivedMpdu(Ptr<const WifiMpdu> mpdu)
+RecipientBlockAckAgreement::NotifyReceivedMpdu(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
 {
     NS_LOG_FUNCTION(this << *mpdu);
-
-    uint16_t mpduSeqNumber = mpdu->GetHeader().GetSequenceNumber();
-    uint16_t distance = GetDistance(mpduSeqNumber, m_scoreboard.GetWinStart());
-    // std::cout << "Start: " << std::to_string(m_scoreboard.GetWinStart()) << " " <<std::to_string(mpduSeqNumber) << std::endl;
-    /* Update the scoreboard (see Section 10.24.7.3 of 802.11-2016) */
-    bool flag = false;
-    if (distance < m_scoreboard.GetWinSize())
-    {
-        // set to 1 the bit in position SN within the bitmap
-        m_scoreboard.At(distance) = true;
-    }
-    else if (distance < SEQNO_SPACE_HALF_SIZE)
-    {
-        if(check_scoreboard_if_full_one()) {
-            // std::cout << "All 1 " << distance << std::endl;
-            flag = true;
+    if (m_mode == 0) {
+        uint16_t mpduSeqNumber = mpdu->GetHeader().GetSequenceNumber();
+        uint16_t distance = GetDistance(mpduSeqNumber, m_scoreboard.GetWinStart());
+        /* Update the scoreboard (see Section 10.24.7.3 of 802.11-2016) */
+        if (distance < m_scoreboard.GetWinSize())
+        {
+            // set to 1 the bit in position SN within the bitmap
+            m_scoreboard.At(distance) = true;
         }
-        else {
-            // std::cout << "Not ALL 1" << distance << std::endl;
-            flag = true;
+        else if (distance < SEQNO_SPACE_HALF_SIZE)
+        {
+            m_scoreboard.Advance(distance - m_scoreboard.GetWinSize() + 1);
+            m_scoreboard.At(m_scoreboard.GetWinSize() - 1) = true;
         }
-        m_scoreboard.Advance(distance - m_scoreboard.GetWinSize() + 1);
-        m_scoreboard.At(m_scoreboard.GetWinSize() - 1) = true;
-    }
 
-    distance = GetDistance(mpduSeqNumber, m_winStartB);
-    // if(flag) std::cout << "new distance: "<< distance << std::endl;
-    /* Update the receive reordering buffer (see Section 10.24.7.6.2 of 802.11-2016) */
-    if (distance < m_winSizeB)
-    {
-        // 1. Store the received MPDU in the buffer, if no MSDU with the same sequence
-        // number is already present
-        m_bufferedMpdus.insert({{mpdu->GetHeader().GetSequenceNumber(), &m_winStartB}, mpdu});
+        distance = GetDistance(mpduSeqNumber, m_winStartB);
+        // if(flag) std::cout << "new distance: "<< distance << std::endl;
+        /* Update the receive reordering buffer (see Section 10.24.7.6.2 of 802.11-2016) */
+        if (distance < m_winSizeB)
+        {
+            // 1. Store the received MPDU in the buffer, if no MSDU with the same sequence
+            // number is already present
+            m_bufferedMpdus.insert({{mpdu->GetHeader().GetSequenceNumber(), &m_winStartB}, mpdu});
 
-        // 2. Pass MSDUs or A-MSDUs up to the next MAC process if they are stored in
-        // the buffer in order of increasing value of the Sequence Number subfield
-        // starting with the MSDU or A-MSDU that has SN=WinStartB
-        // 3. Set WinStartB to the value of the Sequence Number subfield of the last
-        // MSDU or A-MSDU that was passed up to the next MAC process plus one.
-        PassBufferedMpdusUntilFirstLost();
-    }
-    else if (distance < SEQNO_SPACE_HALF_SIZE)
-    {
-        // 1. Store the received MPDU in the buffer, if no MSDU with the same sequence
-        // number is already present
-        m_bufferedMpdus.insert({{mpdu->GetHeader().GetSequenceNumber(), &m_winStartB}, mpdu});
+            // 2. Pass MSDUs or A-MSDUs up to the next MAC process if they are stored in
+            // the buffer in order of increasing value of the Sequence Number subfield
+            // starting with the MSDU or A-MSDU that has SN=WinStartB
+            // 3. Set WinStartB to the value of the Sequence Number subfield of the last
+            // MSDU or A-MSDU that was passed up to the next MAC process plus one.
+            PassBufferedMpdusUntilFirstLost();
+        }
+        else if (distance < SEQNO_SPACE_HALF_SIZE)
+        {
+            // 1. Store the received MPDU in the buffer, if no MSDU with the same sequence
+            // number is already present
+            m_bufferedMpdus.insert({{mpdu->GetHeader().GetSequenceNumber(), &m_winStartB}, mpdu});
 
-        // 2. Set WinEndB = SN
-        // 3. Set WinStartB = WinEndB – WinSizeB + 1
-        // 4. Pass any complete MSDUs or A-MSDUs stored in the buffer with Sequence Number
-        // subfield values that are lower than the new value of WinStartB up to the next
-        // MAC process in order of increasing Sequence Number subfield value. Gaps may
-        // exist in the Sequence Number subfield values of the MSDUs or A-MSDUs that are
-        // passed up to the next MAC process.
-        PassBufferedMpdusWithSeqNumberLessThan(mpdu->GetHeader().GetSequenceNumber() - m_winSizeB +
-                                               1);
+            // 2. Set WinEndB = SN
+            // 3. Set WinStartB = WinEndB – WinSizeB + 1
+            // 4. Pass any complete MSDUs or A-MSDUs stored in the buffer with Sequence Number
+            // subfield values that are lower than the new value of WinStartB up to the next
+            // MAC process in order of increasing Sequence Number subfield value. Gaps may
+            // exist in the Sequence Number subfield values of the MSDUs or A-MSDUs that are
+            // passed up to the next MAC process.
+            PassBufferedMpdusWithSeqNumberLessThan(mpdu->GetHeader().GetSequenceNumber() - m_winSizeB +
+                                                1);
 
-        // 5. Pass MSDUs or A-MSDUs stored in the buffer up to the next MAC process in
-        // order of increasing value of the Sequence Number subfield starting with
-        // WinStartB and proceeding sequentially until there is no buffered MSDU or
-        // A-MSDU for the next sequential Sequence Number subfield value
-        PassBufferedMpdusUntilFirstLost();
+            // 5. Pass MSDUs or A-MSDUs stored in the buffer up to the next MAC process in
+            // order of increasing value of the Sequence Number subfield starting with
+            // WinStartB and proceeding sequentially until there is no buffered MSDU or
+            // A-MSDU for the next sequential Sequence Number subfield value
+            PassBufferedMpdusUntilFirstLost();
+        }
+    } else {
+        uint16_t mpduSeqNumber = mpdu->GetHeader().GetSequenceNumber();
+        uint16_t distance = GetDistance(mpduSeqNumber, m_scoreboard_asyn[linkId].GetWinStart());
+        /* Update the scoreboard (see Section 10.24.7.3 of 802.11-2016) */
+        if (distance < m_scoreboard_asyn[linkId].GetWinSize())
+        {
+            // set to 1 the bit in position SN within the bitmap
+            m_scoreboard_asyn[linkId].At(distance) = true;
+        }
+        else if (distance < SEQNO_SPACE_HALF_SIZE)
+        {
+            m_scoreboard_asyn[linkId].Advance(distance - m_scoreboard_asyn[linkId].GetWinSize() + 1);
+            m_scoreboard_asyn[linkId].At(m_scoreboard.GetWinSize() - 1) = true;
+        }
+
+        distance = GetDistance(mpduSeqNumber, m_winStartB);
+        // if(flag) std::cout << "new distance: "<< distance << std::endl;
+        /* Update the receive reordering buffer (see Section 10.24.7.6.2 of 802.11-2016) */
+        if (distance < m_winSizeB)
+        {
+            // 1. Store the received MPDU in the buffer, if no MSDU with the same sequence
+            // number is already present
+            m_bufferedMpdus.insert({{mpdu->GetHeader().GetSequenceNumber(), &m_winStartB}, mpdu});
+
+            // 2. Pass MSDUs or A-MSDUs up to the next MAC process if they are stored in
+            // the buffer in order of increasing value of the Sequence Number subfield
+            // starting with the MSDU or A-MSDU that has SN=WinStartB
+            // 3. Set WinStartB to the value of the Sequence Number subfield of the last
+            // MSDU or A-MSDU that was passed up to the next MAC process plus one.
+            PassBufferedMpdusUntilFirstLost();
+        }
+        else if (distance < SEQNO_SPACE_HALF_SIZE)
+        {
+            // 1. Store the received MPDU in the buffer, if no MSDU with the same sequence
+            // number is already present
+            m_bufferedMpdus.insert({{mpdu->GetHeader().GetSequenceNumber(), &m_winStartB}, mpdu});
+
+            // 2. Set WinEndB = SN
+            // 3. Set WinStartB = WinEndB – WinSizeB + 1
+            // 4. Pass any complete MSDUs or A-MSDUs stored in the buffer with Sequence Number
+            // subfield values that are lower than the new value of WinStartB up to the next
+            // MAC process in order of increasing Sequence Number subfield value. Gaps may
+            // exist in the Sequence Number subfield values of the MSDUs or A-MSDUs that are
+            // passed up to the next MAC process.
+            PassBufferedMpdusWithSeqNumberLessThan(mpdu->GetHeader().GetSequenceNumber() - m_winSizeB +
+                                                1);
+
+            // 5. Pass MSDUs or A-MSDUs stored in the buffer up to the next MAC process in
+            // order of increasing value of the Sequence Number subfield starting with
+            // WinStartB and proceeding sequentially until there is no buffered MSDU or
+            // A-MSDU for the next sequential Sequence Number subfield value
+            PassBufferedMpdusUntilFirstLost();
+        }
     }
 }
 
@@ -196,47 +238,82 @@ RecipientBlockAckAgreement::Flush()
 }
 
 void
-RecipientBlockAckAgreement::NotifyReceivedBar(uint16_t startingSequenceNumber)
+RecipientBlockAckAgreement::NotifyReceivedBar(uint16_t startingSequenceNumber, uint8_t linkId)
 {
     NS_LOG_FUNCTION(this << startingSequenceNumber);
 
-    uint16_t distance = GetDistance(startingSequenceNumber, m_scoreboard.GetWinStart());
+    if (m_mode == 0) {
+        uint16_t distance = GetDistance(startingSequenceNumber, m_scoreboard.GetWinStart());
 
-    /* Update the scoreboard (see Section 10.24.7.3 of 802.11-2016) */
-    if (distance > 0 && distance < m_scoreboard.GetWinSize())
-    {
-        // advance by SSN - WinStartR, so that WinStartR becomes equal to SSN
-        m_scoreboard.Advance(distance);
-        NS_ASSERT(m_scoreboard.GetWinStart() == startingSequenceNumber);
-    }
-    else if (distance > 0 && distance < SEQNO_SPACE_HALF_SIZE)
-    {
-        // reset the window and set WinStartR to SSN
-        m_scoreboard.Reset(startingSequenceNumber);
-    }
+        /* Update the scoreboard (see Section 10.24.7.3 of 802.11-2016) */
+        if (distance > 0 && distance < m_scoreboard.GetWinSize())
+        {
+            // advance by SSN - WinStartR, so that WinStartR becomes equal to SSN
+            m_scoreboard.Advance(distance);
+            NS_ASSERT(m_scoreboard.GetWinStart() == startingSequenceNumber);
+        }
+        else if (distance > 0 && distance < SEQNO_SPACE_HALF_SIZE)
+        {
+            // reset the window and set WinStartR to SSN
+            m_scoreboard.Reset(startingSequenceNumber);
+        }
 
-    distance = GetDistance(startingSequenceNumber, m_winStartB);
+        distance = GetDistance(startingSequenceNumber, m_winStartB);
 
-    /* Update the receive reordering buffer (see Section 10.24.7.6.2 of 802.11-2016) */
-    if (distance > 0 && distance < SEQNO_SPACE_HALF_SIZE)
-    {
-        // 1. set WinStartB = SSN
-        // 3. Pass any complete MSDUs or A-MSDUs stored in the buffer with Sequence
-        // Number subfield values that are lower than the new value of WinStartB up to
-        // the next MAC process in order of increasing Sequence Number subfield value
-        PassBufferedMpdusWithSeqNumberLessThan(startingSequenceNumber);
+        /* Update the receive reordering buffer (see Section 10.24.7.6.2 of 802.11-2016) */
+        if (distance > 0 && distance < SEQNO_SPACE_HALF_SIZE)
+        {
+            // 1. set WinStartB = SSN
+            // 3. Pass any complete MSDUs or A-MSDUs stored in the buffer with Sequence
+            // Number subfield values that are lower than the new value of WinStartB up to
+            // the next MAC process in order of increasing Sequence Number subfield value
+            PassBufferedMpdusWithSeqNumberLessThan(startingSequenceNumber);
 
-        // 4. Pass MSDUs or A-MSDUs stored in the buffer up to the next MAC process
-        // in order of increasing Sequence Number subfield value starting with
-        // SN=WinStartB and proceeding sequentially until there is no buffered MSDU
-        // or A-MSDU for the next sequential Sequence Number subfield value
-        PassBufferedMpdusUntilFirstLost();
+            // 4. Pass MSDUs or A-MSDUs stored in the buffer up to the next MAC process
+            // in order of increasing Sequence Number subfield value starting with
+            // SN=WinStartB and proceeding sequentially until there is no buffered MSDU
+            // or A-MSDU for the next sequential Sequence Number subfield value
+            PassBufferedMpdusUntilFirstLost();
+        }
+    } else {
+        uint16_t distance = GetDistance(startingSequenceNumber, m_scoreboard_asyn[linkId].GetWinStart());
+
+        /* Update the scoreboard (see Section 10.24.7.3 of 802.11-2016) */
+        if (distance > 0 && distance < m_scoreboard_asyn[linkId].GetWinSize())
+        {
+            // advance by SSN - WinStartR, so that WinStartR becomes equal to SSN
+            m_scoreboard_asyn[linkId].Advance(distance);
+            NS_ASSERT(m_scoreboard_asyn[linkId].GetWinStart() == startingSequenceNumber);
+        }
+        else if (distance > 0 && distance < SEQNO_SPACE_HALF_SIZE)
+        {
+            // reset the window and set WinStartR to SSN
+            m_scoreboard_asyn[linkId].Reset(startingSequenceNumber);
+        }
+
+        distance = GetDistance(startingSequenceNumber, m_winStartB);
+
+        /* Update the receive reordering buffer (see Section 10.24.7.6.2 of 802.11-2016) */
+        if (distance > 0 && distance < SEQNO_SPACE_HALF_SIZE)
+        {
+            // 1. set WinStartB = SSN
+            // 3. Pass any complete MSDUs or A-MSDUs stored in the buffer with Sequence
+            // Number subfield values that are lower than the new value of WinStartB up to
+            // the next MAC process in order of increasing Sequence Number subfield value
+            PassBufferedMpdusWithSeqNumberLessThan(startingSequenceNumber);
+
+            // 4. Pass MSDUs or A-MSDUs stored in the buffer up to the next MAC process
+            // in order of increasing Sequence Number subfield value starting with
+            // SN=WinStartB and proceeding sequentially until there is no buffered MSDU
+            // or A-MSDU for the next sequential Sequence Number subfield value
+            PassBufferedMpdusUntilFirstLost();
+        }
     }
 }
 
 void
 RecipientBlockAckAgreement::FillBlockAckBitmap(CtrlBAckResponseHeader* blockAckHeader,
-                                               std::size_t index) const
+                                               uint8_t linkId, std::size_t index) const
 {
     NS_LOG_FUNCTION(this << blockAckHeader << index);
     if (blockAckHeader->IsBasic())
@@ -259,11 +336,21 @@ RecipientBlockAckAgreement::FillBlockAckBitmap(CtrlBAckResponseHeader* blockAckH
         blockAckHeader->SetStartingSequence(ssn, index);
         blockAckHeader->ResetBitmap(index);
 
-        for (std::size_t i = 0; i < m_scoreboard.GetWinSize(); i++)
-        {
-            if (m_scoreboard.At(i))
+        if (m_mode == 0) {
+            for (std::size_t i = 0; i < m_scoreboard.GetWinSize(); i++)
             {
-                blockAckHeader->SetReceivedPacket((ssn + i) % SEQNO_SPACE_SIZE, index);
+                if (m_scoreboard.At(i))
+                {
+                    blockAckHeader->SetReceivedPacket((ssn + i) % SEQNO_SPACE_SIZE, index);
+                }
+            }
+        } else {
+            for (std::size_t i = 0; i < m_scoreboard_asyn[linkId].GetWinSize(); i++)
+            {
+                if (m_scoreboard_asyn[linkId].At(i))
+                {
+                    blockAckHeader->SetReceivedPacket((ssn + i) % SEQNO_SPACE_SIZE, index);
+                }
             }
         }
     }

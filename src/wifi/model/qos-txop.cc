@@ -175,6 +175,7 @@ QosTxop::DoInitialize()
 {
     NS_LOG_FUNCTION(this);
     Txop::DoInitialize();
+    m_baManager->SetMode(m_mode);
     if(m_mode){
         for(uint8_t i = 0; i < m_mac->GetNLinks(); i++)
         {
@@ -333,6 +334,14 @@ QosTxop::GetBaStartingSequence(Mac48Address address, uint8_t tid) const
     return m_baManager->GetOriginatorStartingSequence(address, tid);
 }
 
+uint16_t
+QosTxop::GetBaStartingSequence(Mac48Address address, uint8_t tid, uint8_t linkId) const
+{
+    if (m_mode) return m_baManager->GetOriginatorRptr(address, tid, linkId);
+    return m_baManager->GetOriginatorStartingSequence(address, tid);
+}
+
+
 std::pair<CtrlBAckRequestHeader, WifiMacHeader>
 QosTxop::PrepareBlockAckRequest(Mac48Address recipient, uint8_t tid) const
 {
@@ -456,8 +465,7 @@ QosTxop::PeekNextMpdu(uint8_t linkId, uint8_t tid, Mac48Address recipient, Ptr<c
             m_queue->Remove(mpdu);
             continue;
         }
-        // std::cout <<(uint32_t) item->GetAllocatedLink() << std::endl;
-        // if(item->GetAllocatedLink())// mode2中的数据包
+
         if ( m_mode == 2 )
         {   
             // std::cout << "mode 2" << IsLinkAllocated(linkId, item->GetAllocatedLink()) << std::endl;
@@ -602,9 +610,6 @@ QosTxop::PeekNextMpdu(uint8_t linkId, uint8_t tid, Mac48Address recipient, Ptr<c
     {
         Mac48Address recipient = hdr.GetAddr1();
         uint8_t tid = hdr.GetQosTid();
-        // std::cout<<" BAW起始 "<< GetBaStartingSequence(recipient, tid)<<std::endl;
-        // std::cout<<" BAW size "<< GetBaBufferSize(recipient, tid)<<std::endl;
-        // GetBaStartingSequence(recipient, tid);
         if (m_mac->GetBaAgreementEstablishedAsOriginator(recipient, tid) &&
             !IsInWindow(sequence,
                         GetBaStartingSequence(recipient, tid),

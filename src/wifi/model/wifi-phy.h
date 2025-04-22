@@ -147,16 +147,23 @@ class WifiPhy : public Object
      * use to send this PSDU, and txPowerLevel, a power level to use to send the whole PPDU. The
      * real transmission power is calculated as txPowerMin + txPowerLevel * (txPowerMax -
      * txPowerMin) / nTxLevels
+     * \param linkid the ID of the link used for transmission
+     * \param linkAckEnable pointer to vector indicating link acknowledgment status
      */
     void Send(Ptr<const WifiPsdu> psdu, const WifiTxVector& txVector);
+    void Send(Ptr<const WifiPsdu> psdu, const WifiTxVector& txVector, uint8_t linkId, std::vector<bool> & linkTxStatus);
+    
     /**
      * \param psdus the PSDUs to send
      * \param txVector the TXVECTOR that has tx parameters such as mode, the transmission mode to
      * use to send this PSDU, and txPowerLevel, a power level to use to send the whole PPDU. The
      * real transmission power is calculated as txPowerMin + txPowerLevel * (txPowerMax -
      * txPowerMin) / nTxLevels
+     * \param linkid the ID of the link used for transmission 
+     * \param linkAckEnable pointer to vector indicating link acknowledgment status
      */
     void Send(const WifiConstPsduMap& psdus, const WifiTxVector& txVector);
+    void Send(const WifiConstPsduMap& psdus, const WifiTxVector& txVector, uint8_t linkId, std::vector<bool> & linkTxStatus);
 
     /**
      * \param ppdu the PPDU to send
@@ -1574,6 +1581,20 @@ class WifiPhy : public Object
                    MpduInfo,
                    uint16_t /* STA-ID*/>
         m_phyMonitorSniffTxTrace;
+
+    /**
+     * Callback function when transmission begins on a link
+     * \param linkid the ID of link used for transmission
+     * \param linkAckEnable pointer to vector indicating link acknowledgment status
+     */
+    void TxBeginUpdateLinkTxStatus(uint8_t linkId, std::vector<bool>& linkStatus);
+
+    /**
+     * Callback function when transmission completes on a link
+     * \param linkid the ID of link used for transmission
+     * \param linkAckEnable pointer to vector indicating link acknowledgment status 
+     */
+    void TxDoneUpdateLinkTxStatus(uint8_t linkId, std::vector<bool>& linkStatus);
 
     /**
      * \return the map of __implemented__ PHY entities.

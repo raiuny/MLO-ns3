@@ -674,6 +674,7 @@ main(int argc, char* argv[])
 
     // AP 1
     auto packetInterval2 = payloadSize * 8.0 / (maxLoad2 * r1);
+    if (!(infer & 0x01)) packetInterval2 = 1e9;
     UdpClientHelper client1(sldNodeInterface2.GetAddress(0), port);
     client1.SetAttribute("MaxPackets", UintegerValue(0));
     client1.SetAttribute("Interval", TimeValue(Seconds(packetInterval2)));
@@ -685,10 +686,11 @@ main(int argc, char* argv[])
 
     // AP 2
     auto packetInterval5 = payloadSize * 8.0 / (maxLoad5 * r2);
+    if (!(infer & 0x02)) packetInterval5 = 1e9;
     UdpClientHelper client2(sldNodeInterface5.GetAddress(0), port);
     // client2.SetAttribute("MaxPackets", UintegerValue(0));
     client2.SetAttribute("MaxPackets", UintegerValue(1));
-    client2.SetAttribute("Interval", TimeValue(Seconds(0.1)));
+    client2.SetAttribute("Interval", TimeValue(Seconds(packetInterval5)));
     client2.SetAttribute("PacketSize", UintegerValue(payloadSize));
     ApplicationContainer clientApp2 = client2.Install(apNodes.Get(2));
     seedNumber += client2.AssignStreams(apNodes.Get(2), seedNumber);

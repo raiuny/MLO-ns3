@@ -357,15 +357,38 @@ HtFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
     {
         NS_LOG_DEBUG("No frames available for transmission");
         // std::cout << "No frames available for transmission on Link " << std::to_string(m_linkId) << std::endl;
-        if (edca->GetMsduGrouper()) {
+        if (edca->GetMsduGrouper())
+        {
             edca->GetMsduGrouper()->ResetInflighedCnt();
-        }
-        if (m_mac->GetNLinks() > 1 && edca->GetMsduGrouper()) 
             edca->GetMsduGrouper()->UpdateAmpduSize(m_linkId, 0);
-        peekedItem = edca->PeekNextMpdu(m_linkId);
-        if (!peekedItem) return false;
+            peekedItem = edca->PeekNextMpdu(m_linkId);
+        }
+        if (!peekedItem)
+            return false;
     }
     
+    //海思新架构模拟
+    //发送前同步
+    if(m_mac->GetNLinks() > 1 && peekedItem->GetHeader().IsQosData() && !peekedItem->GetHeader().GetAddr1().IsBroadcast()){
+        uint8_t tid = peekedItem->GetQueueAc();
+        for (const auto& linkId : m_mac->GetLinkIds())
+        {
+            GetBaManager(tid)->UpdateLinkRPtrSyncEnabled(linkId, m_mac->GetLinkTxStatus()[linkId]);
+        }
+        // std::cout << "同步前： " << std::endl;
+        // std::vector<uint16_t> rptrs = GetBaManager(tid)->GetRptr(peekedItem->GetHeader().GetAddr1(), tid);
+        // for (auto i : rptrs) {
+        //     std::cout << (uint32_t)i  << " " ;
+        // }
+        // std::cout << std::endl << "同步后：\n" ;
+        GetBaManager(tid)->SyncRptr(peekedItem->GetHeader().GetAddr1(), tid, m_linkId); //同步该链路的信息到其他链路
+
+        // rptrs = GetBaManager(tid)->GetRptr(peekedItem->GetHeader().GetAddr1(), tid);
+        // for (auto i : rptrs) {
+        //     std::cout << (uint32_t)i  << " " ;
+        // }
+        // std::cout << std::endl;
+    }
 
     const WifiMacHeader& hdr = peekedItem->GetHeader();
     // setup a Block Ack agreement if needed
@@ -1153,8 +1176,10 @@ HtFrameExchangeManager::ForwardPsduDown(Ptr<const WifiPsdu> psdu, WifiTxVector& 
     {
         txVector.SetAggregation(true);
     }
-
-    m_phy->Send(psdu, txVector);
+    if (m_mac->GetNLinks() > 1)
+        m_phy->Send(psdu, txVector, m_linkId, m_mac->GetLinkTxStatus());
+    else 
+        m_phy->Send(psdu, txVector);
 }
 
 bool
@@ -1501,7 +1526,7 @@ HtFrameExchangeManager::SendBlockAck(const RecipientBlockAckAgreement& agreement
     CtrlBAckResponseHeader blockAck;
     blockAck.SetType(agreement.GetBlockAckType());
     blockAck.SetTidInfo(agreement.GetTid());
-    agreement.FillBlockAckBitmap(&blockAck);
+    agreement.FillBlockAckBitmap(&blockAck, m_linkId);
 
     Ptr<Packet> packet = Create<Packet>();
     packet->AddHeader(blockAck);
@@ -1579,17 +1604,25 @@ HtFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
             CtrlBAckResponseHeader blockAck;
             mpdu->GetPacket()->PeekHeader(blockAck);
             uint8_t tid = blockAck.GetTidInfo();
+
+            // 接收BA前: 查看各链路状态
+            for (const auto & linkId : m_mac->GetLinkIds())
+            {
+                GetBaManager(tid)->UpdateLinkRPtrSyncEnabled(linkId, m_mac->GetLinkTxStatus()[linkId]);
+            }
+
             std::pair<uint16_t, uint16_t> ret =
                 GetBaManager(tid)->NotifyGotBlockAck(m_linkId,
-                                                     blockAck,
-                                                     m_mac->GetMldAddress(sender).value_or(sender),
-                                                     {tid});
+                                                    blockAck,
+                                                    m_mac->GetMldAddress(sender).value_or(sender),
+                                                    {tid});
+                                                    
             GetWifiRemoteStationManager()->ReportAmpduTxStatus(sender,
-                                                               ret.first,
-                                                               ret.second,
-                                                               rxSnr,
-                                                               tag.Get(),
-                                                               m_txParams.m_txVector);
+                                                            ret.first,
+                                                            ret.second, 
+                                                            rxSnr,
+                                                            tag.Get(),
+                                                            m_txParams.m_txVector);
 
             // cancel the timer
             m_txTimer.Cancel();
@@ -1630,7 +1663,7 @@ HtFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
             GetBaManager(tid)->NotifyGotBlockAckRequest(
                 m_mac->GetMldAddress(sender).value_or(sender),
                 tid,
-                blockAckReq.GetStartingSequence());
+                blockAckReq.GetStartingSequence(), m_linkId);
 
             NS_LOG_DEBUG("Schedule Block Ack");
             Simulator::Schedule(
@@ -1659,7 +1692,7 @@ HtFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
             // a Block Ack agreement has been established
             NS_LOG_DEBUG("Received from=" << hdr.GetAddr2() << " (" << *mpdu << ")");
 
-            GetBaManager(tid)->NotifyGotMpdu(mpdu);
+            GetBaManager(tid)->NotifyGotMpdu(mpdu, m_linkId);
 
             if (!inAmpdu && hdr.GetQosAckPolicy() == WifiMacHeader::NORMAL_ACK)
             {

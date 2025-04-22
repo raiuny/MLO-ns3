@@ -114,6 +114,7 @@ class QosTxop : public Txop
      * recipient for the given TID.
      */
     uint16_t GetBaStartingSequence(Mac48Address address, uint8_t tid) const;
+    uint16_t GetBaStartingSequence(Mac48Address address, uint8_t tid, uint8_t linkId) const;
     /**
      * \param recipient Address of recipient.
      * \param tid traffic ID.

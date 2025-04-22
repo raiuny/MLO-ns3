@@ -779,6 +779,13 @@ class WifiMac : public Object
                          uint8_t tid,
                          uint8_t linkId) const;
 
+    /**
+     * Get the vector indicating whether each link is enabled for transmission
+     *
+     * \return pointer to the vector of link transmission states
+     */  
+    std::vector<bool> & GetLinkTxStatus();
+
   protected:
     void DoInitialize() override;
     void DoDispose() override;
@@ -1348,6 +1355,8 @@ class WifiMac : public Object
     using IcfDropTracedCallback = TracedCallback<WifiIcfDrop, uint8_t>;
 
     IcfDropTracedCallback m_icfDropCallback; //!< traced callback for ICF drop events
+
+    std::vector<bool> m_linkTxStatus; //!< Vector indicating whether each link is enabled for transmission
 };
 
 } // namespace ns3

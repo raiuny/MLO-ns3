@@ -1661,7 +1661,7 @@ HeFrameExchangeManager::SendMultiStaBlockAck(const WifiTxParameters& txParams, T
 
             auto agreement = m_mac->GetBaAgreementEstablishedAsRecipient(receiver, tid);
             NS_ASSERT(agreement);
-            agreement->get().FillBlockAckBitmap(&blockAck, index);
+            agreement->get().FillBlockAckBitmap(&blockAck, m_linkId,  index);
             NS_LOG_DEBUG("Multi-STA Block Ack: Sending Block Ack with seq="
                          << blockAck.GetStartingSequence(index) << " to=" << receiver
                          << " tid=" << +tid);
@@ -2207,7 +2207,8 @@ HeFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
             GetBaManager(tid)->NotifyGotBlockAckRequest(
                 m_mac->GetMldAddress(sender).value_or(sender),
                 tid,
-                blockAckReq.GetStartingSequence());
+                blockAckReq.GetStartingSequence(),
+                m_linkId);
 
             // Block Acknowledgment context
             acknowledgment->stationsReceivingMultiStaBa.emplace(std::make_pair(sender, tid), index);
@@ -2221,7 +2222,7 @@ HeFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
             NS_LOG_DEBUG("Received an S-MPDU in a TB PPDU from " << sender << " (" << *mpdu << ")");
 
             uint8_t tid = hdr.GetQosTid();
-            GetBaManager(tid)->NotifyGotMpdu(mpdu);
+            GetBaManager(tid)->NotifyGotMpdu(mpdu, m_linkId);
 
             // Acknowledgment context of Multi-STA Block Acks
             acknowledgment->stationsReceivingMultiStaBa.emplace(std::make_pair(sender, tid), index);
@@ -2604,7 +2605,7 @@ HeFrameExchangeManager::ReceiveMpdu(Ptr<const WifiMpdu> mpdu,
                 GetBaManager(tid)->NotifyGotBlockAckRequest(
                     m_mac->GetMldAddress(sender).value_or(sender),
                     tid,
-                    blockAckReq.GetStartingSequence());
+                    blockAckReq.GetStartingSequence(), m_linkId);
 
                 Simulator::Schedule(m_phy->GetSifs(),
                                     &HeFrameExchangeManager::ReceiveMuBarTrigger,

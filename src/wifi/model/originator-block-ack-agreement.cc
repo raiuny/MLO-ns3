@@ -21,8 +21,10 @@ NS_LOG_COMPONENT_DEFINE("OriginatorBlockAckAgreement");
 
 OriginatorBlockAckAgreement::OriginatorBlockAckAgreement(Mac48Address recipient, uint8_t tid)
     : BlockAckAgreement(recipient, tid),
+      m_linkRPtr({0, 0}),
       m_state(PENDING)
 {
+    std::cout << "CreateOriginatorBlockAckAgreement: recipient: " << recipient << " tid: " << (uint32_t)tid << " " <<  m_linkRPtr.size() << std::endl;
 }
 
 OriginatorBlockAckAgreement::~OriginatorBlockAckAgreement()
@@ -86,7 +88,6 @@ void
 OriginatorBlockAckAgreement::InitTxWindow()
 {
     m_txWindow.Init(m_startingSeq, m_bufferSize);
-    // std::cout << "OriginatorBlockAckAgreement: " << std::to_string(m_startingSeq) << " m_bufferSize: " << std::to_string(m_bufferSize) << std::endl;
 }
 
 bool

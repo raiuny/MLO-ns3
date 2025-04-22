@@ -45,7 +45,8 @@ class RecipientBlockAckAgreement : public BlockAckAgreement
                                uint16_t bufferSize,
                                uint16_t timeout,
                                uint16_t startingSeq,
-                               bool htSupported);
+                               bool htSupported,
+                               uint32_t mode);
     ~RecipientBlockAckAgreement() override;
 
     /**
@@ -61,7 +62,7 @@ class RecipientBlockAckAgreement : public BlockAckAgreement
      *
      * \param mpdu the received MPDU
      */
-    void NotifyReceivedMpdu(Ptr<const WifiMpdu> mpdu);
+    void NotifyReceivedMpdu(Ptr<const WifiMpdu> mpdu, uint8_t linkId);
     /**
      * Update both the scoreboard and the receive reordering buffer upon reception
      * of a Block Ack Request.
@@ -69,7 +70,7 @@ class RecipientBlockAckAgreement : public BlockAckAgreement
      * \param startingSequenceNumber the starting sequence number included in the
      *                               received Block Ack Request
      */
-    void NotifyReceivedBar(uint16_t startingSequenceNumber);
+    void NotifyReceivedBar(uint16_t startingSequenceNumber, uint8_t linkId);
     /**
      * Set the Starting Sequence Number subfield of the Block Ack Starting Sequence
      * Control subfield of the Block Ack frame and fill the block ack bitmap.
@@ -79,14 +80,13 @@ class RecipientBlockAckAgreement : public BlockAckAgreement
      * \param blockAckHeader the block ack header
      * \param index the index of the Per AID TID Info subfield (Multi-STA Block Ack only)
      */
-    void FillBlockAckBitmap(CtrlBAckResponseHeader* blockAckHeader, std::size_t index = 0) const;
+    void FillBlockAckBitmap(CtrlBAckResponseHeader* blockAckHeader, uint8_t linkId, std::size_t index = 0) const;
     /**
      * This is called when a Block Ack agreement is destroyed to flush the
      * received packets.
      */
     void Flush();
 
-    
   private:
     /**
      * Pass MSDUs or A-MSDUs up to the next MAC process if they are stored in
@@ -96,7 +96,7 @@ class RecipientBlockAckAgreement : public BlockAckAgreement
      * MSDU or A-MSDU that was passed up to the next MAC process plus one.
      */
     void PassBufferedMpdusUntilFirstLost();
-bool check_scoreboard_if_full_one();
+    bool check_scoreboard_if_full_one();
     /**
      * Pass any complete MSDUs or A-MSDUs stored in the buffer with Sequence Number
      * subfield values that are lower than the new value of WinStartB up to the next
@@ -123,6 +123,8 @@ bool check_scoreboard_if_full_one();
     };
 
     BlockAckWindow m_scoreboard; ///< recipient's scoreboard
+    std::vector<BlockAckWindow> m_scoreboard_asyn; // used for m_mode > 0
+    uint32_t m_mode;
     uint16_t m_winStartB;        ///< starting SN for the reordering buffer
     std::size_t m_winSizeB;      ///< size of the receive reordering buffer
     std::map<Key, Ptr<const WifiMpdu>, Compare>

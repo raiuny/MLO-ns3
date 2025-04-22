@@ -216,13 +216,14 @@ class BlockAckManager : public Object
      */
     void NotifyGotBlockAckRequest(const Mac48Address& originator,
                                   uint8_t tid,
-                                  uint16_t startingSeq);
+                                  uint16_t startingSeq,
+                                 uint8_t linkId);
     /**
      * \param mpdu the received MPDU
      *
      * Perform required actions upon receiving an MPDU.
      */
-    void NotifyGotMpdu(Ptr<const WifiMpdu> mpdu);
+    void NotifyGotMpdu(Ptr<const WifiMpdu> mpdu, uint8_t linkId);
     /**
      * \param recipient Address of peer station involved in block ack mechanism.
      * \param tid Traffic ID.
@@ -431,8 +432,44 @@ class BlockAckManager : public Object
      * \param recipient the recipient
      * \param tid the TID
      */
-    void RemoveFromSendBarIfDataQueuedList(const Mac48Address& recipient, uint8_t tid);
-    TracedCallback<Ptr<const WifiMpdu>> m_bawDiscardMpduTrace;
+    void RemoveFromSendBarIfDataQueuedList(const Mac48Address& recipient, uint8_t tid);\
+    
+    /**
+     * Get the minimum read pointer value among all links.
+     *
+     * \param recipient the recipient MAC address
+     * \param tid Traffic ID
+     * \return the minimum read pointer value
+     */
+    uint16_t GetOriginatorRptr(const Mac48Address& recipient, uint8_t tid, uint8_t linkId) const;
+
+    /**
+     * Reset read pointers after block ack.
+     *
+     * \param recipient the recipient MAC address  
+     * \param tid Traffic ID
+     */
+    void SyncRptr(const Mac48Address& recipient, uint8_t tid, uint8_t linkId);
+
+    /**
+     * Set whether a link is in TX or ACK mode.
+     *
+     * \param isTx whether the link is in TX mode
+     * \param linkId link identifier 
+     */
+    void UpdateLinkRPtrSyncEnabled(uint8_t linkId, bool txStatus);
+
+    /**
+     * Get read pointer values for both links.
+     *
+     * \param recipient the recipient MAC address
+     * \param tid Traffic ID
+     * \return vector containing read pointer values and window start
+     */
+    std::vector<uint16_t> GetRptr(const Mac48Address& recipient, uint8_t tid);
+
+    void SetMode(uint32_t mode);
+
   protected:
     void DoDispose() override;
 
@@ -510,6 +547,8 @@ class BlockAckManager : public Object
      */
     TracedCallback<Time, Mac48Address, uint8_t, OriginatorBlockAckAgreement::State>
         m_originatorAgreementState;
+    std::vector<bool> m_linkRPtrSyncEnabled{true, true}; //!< Per-link ACK mode enabled flags
+    uint32_t m_mode;
 };
 
 } // namespace ns3

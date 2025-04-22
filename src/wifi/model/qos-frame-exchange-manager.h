@@ -142,7 +142,7 @@ class QosFrameExchangeManager : public FrameExchangeManager
      *                     limit can be exceeded
      * \return true if a frame exchange is started, false otherwise
      */
-    virtual bool StartFrameExchange(Ptr<QosTxop> edca, Time availableTime, bool initialFrame);
+    virtual bool StartFrameExchange(Ptr<QosTxop> edca, Time availableTime, bool initialFrame); //虚函数会被覆盖
 
     /**
      * Perform a PIFS recovery as a response to transmission failure within a TXOP.

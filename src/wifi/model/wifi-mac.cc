@@ -52,6 +52,7 @@ WifiMac::WifiMac()
     m_rxMiddle->SetForwardCallback(MakeCallback(&WifiMac::Receive, this));
 
     m_txMiddle = Create<MacTxMiddle>();
+    m_linkTxStatus.resize(2, false);
 }
 
 WifiMac::~WifiMac()
@@ -2496,6 +2497,11 @@ WifiMac::GetMaxAmsduSize(AcIndex ac) const
         return 0;
     }
     return maxSize;
+}
+
+std::vector<bool> &
+WifiMac::GetLinkTxStatus() {
+    return m_linkTxStatus;
 }
 
 } // namespace ns3

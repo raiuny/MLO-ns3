@@ -288,6 +288,7 @@ class WifiMacQueue : public Queue<WifiMpdu, ns3::WifiMacQueueContainer>
      */
     Ptr<WifiMpdu> GetAlias(Ptr<const WifiMpdu> mpdu, uint8_t linkId);
 
+    std::vector<uint64_t> CountAllocatedLinks(WifiContainerQueueId queueId);
   protected:
     using Queue<WifiMpdu, WifiMacQueueContainer>::GetContainer;
 

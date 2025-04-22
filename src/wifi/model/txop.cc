@@ -682,7 +682,6 @@ Txop::Queue(Ptr<WifiMpdu> mpdu)
     }
     m_queue->Enqueue(mpdu);
     
-    //简单过滤出需要处理的msdu
     if(m_mode && mpdu->GetHeader().IsQosData() && mpdu->GetPacketSize() != mpdu->GetPacket()->GetAdjustment()){
         // std::cout<< "msdu入队" <<std::endl;
         m_grouper->AggregateMsdu(mpdu);

@@ -9,8 +9,9 @@
 #include "ns3/log.h"
 #include "ns3/random-variable-stream.h"
 #include "ns3/wifi-mac.h"
-#include <fstream>
 #include "ns3/udp-client-server-helper.h"
+#include <fstream>
+#include <deque>
 #include <range/v3/view/cartesian_product.hpp>
 #include <nlohmann/json.hpp>
 
@@ -267,12 +268,9 @@ public:
     /**
      * 模式二分配AMSDU的发送链路
      */
-    void AssignAmsdu();
-
-    /**
-     * 模式二分配AMSDU的发送链路
-     */
     void AssignAmsduByPr();
+
+    void SetLink1PctByQueuePowAvg(double thp1, double thp2);
 
     void NotifyPacketEnqueue(Ptr<const WifiMpdu> mpdu, bool firstAssignSeqNo);
     void NotifyPhyTxEvent(Ptr<const Packet> packet,
@@ -373,6 +371,10 @@ private:
     uint32_t m_currentGroup;  // 当前组号
     uint32_t m_currentCount;  // 当前组中的MSDU数量
     Ptr<WifiMpdu> m_firstMsdu;
+    double m_link1Pct; // 分配给链路1的概率
+    std::set<WifiContainerQueueId> m_queueIds;
+    uint64_t m_enqueueNum;
+    std::deque<double> m_historyPct;
 
     /* Mode 1 */
     uint32_t m_redundancyMode;

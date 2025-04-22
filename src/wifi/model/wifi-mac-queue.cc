@@ -537,4 +537,30 @@ WifiMacQueue::DoRemove(ConstIterator pos)
     return item;
 }
 
+std::vector<uint64_t> 
+WifiMacQueue::CountAllocatedLinks(WifiContainerQueueId queueId)
+{
+    const auto& container = GetContainer();
+    const auto& queue = container.GetQueue(queueId);  
+
+    uint64_t link_counts[2] = {}; 
+
+    for (const auto& item : queue)  
+    {
+        const auto& mpdu = item.mpdu;
+        if (mpdu && !mpdu->IsInFlight())  
+        {
+            if (const auto link_id = mpdu->GetAllocatedLink())  
+            {
+                if (link_id == 1 || link_id == 2)  
+                {
+                    link_counts[link_id - 1] += mpdu->GetNMsdus();  
+                }
+            }
+        }
+    }
+
+    return {link_counts[0], link_counts[1]};  
+}
+
 } // namespace ns3

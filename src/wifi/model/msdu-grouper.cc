@@ -323,8 +323,9 @@ MsduGrouper::MsduGrouper(uint32_t maxGroupSize,
       m_maxGroupNumber(maxGroupNumber),
       m_currentGroup(0),
       m_currentCount(0),
-      m_firstMsdu(nullptr)
-      
+      m_firstMsdu(nullptr),
+      m_link1Pct(0),
+      m_enqueueNum(0)
 {
     m_allocatedLink1Pr = CreateObject<UniformRandomVariable>();
     m_allocatedLink1Pr->SetAttribute("Min", DoubleValue(0.0));
@@ -359,33 +360,10 @@ MsduGrouper::GetTypeId()
 }
 
 void
-MsduGrouper::AssignAmsdu()
-{
-    double value1 = m_allocatedLink1Pr->GetValue();
-    double value2 = m_allocatedLink2Pr->GetValue();
-
-    if (value1 > value2)
-    {
-        m_firstMsdu->SetAllocatedLink(1);
-    }
-    else if (value1 < value2)
-    {
-        m_firstMsdu->SetAllocatedLink(2);
-    }
-    else
-    {
-        m_firstMsdu->SetAllocatedLink(3);
-    }
-    // NS_LOG_DEBUG(" MPDU " << *m_firstMsdu << " assigned to link " <<
-    // +m_firstMsdu->GetAllocatedLink());
-}
-
-void
 MsduGrouper::AssignAmsduByPr()
 {
-    double value1 = m_allocatedLink1Pr->GetValue();
-    double Bar = 0.5;
-    if (value1 < Bar)
+    double value = m_allocatedLink1Pr->GetValue();
+    if (value < m_link1Pct)
     {
         m_firstMsdu->SetAllocatedLink(1);
     }
@@ -393,8 +371,49 @@ MsduGrouper::AssignAmsduByPr()
     {
         m_firstMsdu->SetAllocatedLink(2);
     }
-    // NS_LOG_DEBUG(" MPDU " << *m_firstMsdu << " assigned to link " <<
-    // +m_firstMsdu->GetAllocatedLink());
+}
+
+void 
+MsduGrouper::SetLink1PctByQueuePowAvg(double thp1, double thp2)
+{
+    std::vector<uint64_t> allocatedLinksNum =
+        m_queue->CountAllocatedLinks(*m_queueIds.cbegin()); // MacQueue中分配到各链路的msdu的数量
+
+    // 计算实时比例
+    auto assignlink1Num = static_cast<uint64_t>(std::round(
+        (thp1 * allocatedLinksNum[1] - thp2 * allocatedLinksNum[0] + thp1 * m_enqueueNum) /
+        (thp1 + thp2)));
+
+    double new_pct = 0.0;
+    if (m_enqueueNum != 0)
+    {
+        new_pct = static_cast<double>(assignlink1Num) / static_cast<double>(m_enqueueNum);
+        new_pct = std::round(new_pct * 1000.0) / 1000.0;
+    }
+
+    // 维护移动窗口
+    m_historyPct.push_back(new_pct);
+    while (m_historyPct.size() > 5)
+    {
+        m_historyPct.pop_front();
+    }
+
+    double weighted_sum = 0.0;
+    double weight_total = 0.0;
+    for (size_t i = 0; i < m_historyPct.size(); ++i)
+    {
+        double weight = i + 1; // 第0个元素（最旧）权重1
+        weighted_sum += m_historyPct[i] * weight;
+        weight_total += weight;
+    }
+    m_link1Pct = std::round((weighted_sum / weight_total) * 1000.0) / 1000.0;
+
+    std::cout << "m_enqueueNum: " << m_enqueueNum << std::endl;
+    std::cout << "allocated link1: " << allocatedLinksNum[0] << " link2: " << allocatedLinksNum[1]
+              << std::endl;
+    std::cout << "thp: link1=" << thp1 << " link2=" << thp2 << std::endl;
+    std::cout << "new_pct: " << new_pct << " WMA_pct: " << m_link1Pct
+              << " (window=" << m_historyPct.size() << ")" << std::endl;
 }
 
 void
@@ -402,7 +421,12 @@ MsduGrouper::AggregateMsdu(Ptr<WifiMpdu> msdu)
 {
     if (m_mode == 0)
         return;
-    NS_LOG_FUNCTION(this << msdu);
+    m_enqueueNum ++;
+    m_queueIds.insert(WifiMacQueueContainer::GetQueueId(msdu));
+    if (m_queueIds.size() >= 2) {
+        NS_LOG_WARN("WifiContainerQueueId: Detected two different queue IDs");
+    }
+
     if (m_currentCount >= m_maxGroupSize)
     {
         // 如果当前组已满，则移动到下一组
@@ -878,4 +902,5 @@ MsduGrouper::ClearStats()
     m_maxAmpduSize = {0, 0};
     m_startTime = Simulator::Now();
 }
+
 } // namespace ns3

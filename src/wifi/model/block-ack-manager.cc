@@ -482,7 +482,6 @@ BlockAckManager::NotifyGotBlockAck(uint8_t linkId,
                 NS_ASSERT(m_linkRPtrSyncEnabled[linkId]);
                 it->second.first.m_linkRPtr[linkId] = it->second.first.m_txWindow.GetWinStart();
             }
-
             nSuccessfulMpdus++;
             if (!m_txOkCallback.IsNull())
             {
@@ -527,7 +526,6 @@ BlockAckManager::NotifyGotBlockAck(uint8_t linkId,
 
         queueIt = HandleInFlightMpdu(linkId, queueIt, STAY_INFLIGHT, it, now);
     }
-
     return {nSuccessfulMpdus, nFailedMpdus};
 }
 

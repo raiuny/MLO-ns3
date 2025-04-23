@@ -120,7 +120,9 @@ OriginatorBlockAckAgreement::AdvanceTxWindow()
     while (m_txWindow.At(0))
     {
         m_txWindow.Advance(1); // reset the current head -- ensures loop termination
+        // std::cout << "winStart: " << m_txWindow.GetWinStart() << std::endl;
     }
+    // std::cout << "winStart: " << m_txWindow.GetWinStart() << std::endl;
 }
 
 void
@@ -154,7 +156,6 @@ OriginatorBlockAckAgreement::NotifyAckedMpdu(Ptr<const WifiMpdu> mpdu)
 {
     uint16_t mpduSeqNumber = mpdu->GetHeader().GetSequenceNumber();
     uint16_t distance = GetDistance(mpduSeqNumber);
-
     if (distance >= SEQNO_SPACE_HALF_SIZE)
     {
         NS_LOG_DEBUG("Acked an old MPDU, do nothing.");

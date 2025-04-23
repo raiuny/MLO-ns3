@@ -255,7 +255,7 @@ QueueStats::Enqueue(Ptr<const WifiMpdu> mpdu)
     if (it == m_bawqueue.end())
     {
         m_bawqueue[{recipient, tid}] = std::vector<WiFiBawQueueIt>();
-        m_bawqueue[{recipient, tid}].push_back(std::move(mpduit));
+        m_bawqueue[{recipient, tid}].push_back(mpduit);
     }
     else
     {
@@ -664,7 +664,6 @@ MsduGrouper::NotifyAcked(Ptr<const WifiMpdu> mpdu, uint8_t linkId)
         it->m_msduNum = mpdu->GetNMsdus();
         it->m_rxstate = true;
         it->m_ackTime = Simulator::Now();
-        // std::cout << "Acked: " << mpdu->GetHeader().GetSequenceNumber() << " " << it->m_mpduSeqNo << std::endl;
     }
 
     m_queueStats.Pop(mpdu, true);
@@ -717,12 +716,12 @@ MsduGrouper::UpdateAmpduSize(uint8_t linkId, uint32_t size)
     if (Simulator::Now() > m_startTime + MilliSeconds(100))
     {
         if (size < GetBAWindowThreshold(linkId))
-        {
-            if (size > 0)
-                m_queueStats.m_blockCnt[linkId] += 1;
+        {       
             m_blockrateList[linkId].push_back((double)size / m_maxAmpduSize[linkId]);
-            if (!m_queueStats.blockwindows[linkId].IsStrictlyPositive())
+            if (!m_queueStats.blockwindows[linkId].IsStrictlyPositive()) {
                 m_queueStats.blockwindows[linkId] = Simulator::Now();
+                m_queueStats.m_blockCnt[linkId] += 1;
+            }
             if (m_inflighted[1 - linkId])
                 m_queueStats.m_blockCnt_tr[linkId] += 1;
         }
@@ -863,10 +862,9 @@ MsduGrouper::SetTxopTimeEnd(uint64_t time /* us */, uint8_t linkId)
 {
     m_txopTimeEnd[linkId] = time;
     m_txopTimeList[linkId].push_back(m_txopTimeEnd[linkId] - m_txopTimeBegin[linkId]);
-    // if (m_txopList[linkId].size() == m_txopNumList[linkId].size() - 1) {
     m_txopList[linkId].push_back(std::make_pair(m_txopTimeBegin[linkId], m_txopTimeEnd[linkId]));
-    m_txopNumList[linkId].push_back(linkId == 0 ? 0.5 : 1);
-    // }
+    m_txopNumList[linkId].push_back(linkId);
+
     m_txopTimeEnd[linkId] = 0;
 }
 

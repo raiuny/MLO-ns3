@@ -1423,11 +1423,6 @@ FrameExchangeManager::ReceivedNormalAck(Ptr<WifiMpdu> mpdu,
     // When fragmentation is used, only update manager when the last fragment is acknowledged
     if (!mpdu->GetHeader().IsMoreFragments())
     {
-        if (!m_ackMpduCallback.IsEmpty())
-        {
-            // std::cout<<"Get Normal Ack: "<< mpdu->GetSize() << " " << mpdu->GetHeader().GetType() <<  std::endl;
-            m_ackMpduCallback(mpdu, m_linkId);
-        }
         GetWifiRemoteStationManager()->ReportRxOk(sender, rxInfo, ackTxVector);
         GetWifiRemoteStationManager()->ReportDataOk(mpdu,
                                                     rxInfo.snr,

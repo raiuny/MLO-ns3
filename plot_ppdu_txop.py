@@ -19,14 +19,14 @@ def get_y(type_):
 
 fig, ax = plt.subplots(figsize=(16, 4))
 
-begin = 1300000
-end = 1380000
+begin = 1080000
+end = 1090000
 for idx, row in df.iterrows():
     x_start = row.iloc[1]
     x_end = row.iloc[2]
     if x_start > begin and x_start < end:
         width = x_end - x_start
-        y = get_y(row.iloc[0])
+        y = int(row.iloc[0])
         color = color_map.get(str(row.iloc[0]), 'gray')
         rect = plt.Rectangle((x_start, y-0.4), width, 0.8, color=color, alpha=0.7, edgecolor='black')
         ax.add_patch(rect)

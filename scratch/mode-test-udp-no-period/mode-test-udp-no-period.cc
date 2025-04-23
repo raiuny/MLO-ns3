@@ -241,7 +241,7 @@ main(int argc, char* argv[])
     uint32_t seedNumber = 1;
 
     uint32_t mcs1 = 6;
-    uint32_t mcs2 = 13;
+    uint32_t mcs2 = 11;
     uint32_t bw1 = 20;
     uint32_t bw2 = 160;
     double r1 = 1.0;
@@ -264,7 +264,7 @@ main(int argc, char* argv[])
     uint32_t nss = 1;
     uint8_t mode = 1;
 
-    uint32_t simT = period1 * 3 + 1;
+    uint32_t simT = period1 * 1 + 1;
     CommandLine cmd(__FILE__);
     std::filesystem::path filepath = __FILE__;
     cmd.AddValue("seed", "seed number", seedNumber);
@@ -273,7 +273,9 @@ main(int argc, char* argv[])
     cmd.AddValue("loadrate1", "load rate on 2.4 GHz", r1);
     cmd.AddValue("loadrate2", "load rate on 5 GHz", r2);
     cmd.AddValue("ch1", "channel id on 2.4 GHz", ch1);
-    cmd.AddValue("ch2", "channel id on 2.4 GHz", ch2);
+    cmd.AddValue("ch2", "channel id on 5 GHz", ch2);
+    cmd.AddValue("bw1", "band width on 2.4 GHz", bw1);
+    cmd.AddValue("bw2", "band width on 5 GHz", bw2);
     cmd.AddValue("ratectrl", "rate control alg", rateCtrl);
     cmd.AddValue("bawsize", "BA Window Size", mpduBufferSize);
     cmd.AddValue("max_ampdusize", "Max AmpduSize of AP 0", maxAmpduSize);
@@ -291,8 +293,10 @@ main(int argc, char* argv[])
     cmd.Parse(argc, argv);
 
     Time period{Seconds(period1)};
+    if (!(inference & 0x01)) r1 = 1e-9;
+    if (!(inference & 0x02)) r2 = 1e-9;
     Time tputInterval = period / 2; // interval for detailed throughput measurement
-    std::string title = "bw_" + std::to_string(ch1) + "_" + std::to_string(ch2) + "_mcs_" +
+    std::string title = "bw_" + std::to_string(bw1) + "_" + std::to_string(bw2) + "_mcs_" +
                         std::to_string(mcs1) + "_" + std::to_string(mcs2) + "_interference_" +
                         std::to_string(r1) + "_" + std::to_string(r2) + "_txoplimits_" + 
                         std::to_string(txoplimit1) + "_" + std::to_string(txoplimit2);
@@ -568,6 +572,8 @@ main(int argc, char* argv[])
 
     DynamicCast<WifiNetDevice>(apDev.Get(0))->GetPhy(0)->TraceConnectWithoutContext("PpduTxDuration",MakeCallback(&NotifyPpduTxDurationMLD));
     DynamicCast<WifiNetDevice>(apDev.Get(0))->GetPhy(1)->TraceConnectWithoutContext("PpduTxDuration",MakeCallback(&NotifyPpduTxDurationMLD));
+    // DynamicCast<WifiNetDevice>(apDev.Get(0))->GetMac()->GetAttribute("BE_Txop", ptr);
+    // ptr.Get<QosTxop>()->SetAttribute("UseExplicitBarAfterMissedBlockAck", BooleanValue(false));
     NetDeviceContainer devices;
     devices.Add(apDev);
     devices.Add(mldDev);

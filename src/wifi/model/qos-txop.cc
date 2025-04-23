@@ -612,7 +612,7 @@ QosTxop::PeekNextMpdu(uint8_t linkId, uint8_t tid, Mac48Address recipient, Ptr<c
         uint8_t tid = hdr.GetQosTid();
         if (m_mac->GetBaAgreementEstablishedAsOriginator(recipient, tid) &&
             !IsInWindow(sequence,
-                        GetBaStartingSequence(recipient, tid),
+                        GetBaStartingSequence(recipient, tid, linkId),
                         GetBaBufferSize(recipient, tid)))
         {
             NS_LOG_DEBUG("Packet beyond the end of the current transmit window");

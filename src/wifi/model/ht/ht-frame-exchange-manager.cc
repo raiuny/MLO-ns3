@@ -383,7 +383,7 @@ HtFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
         // std::cout << std::endl << "同步后：\n" ;
         GetBaManager(tid)->SyncRptr(peekedItem->GetHeader().GetAddr1(), tid, m_linkId); //同步该链路的信息到其他链路
 
-        // rptrs = GetBaManager(tid)->GetRptr(peekedItem->GetHeader().GetAddr1(), tid);
+        // auto rptrs = GetBaManager(tid)->GetRptr(peekedItem->GetHeader().GetAddr1(), tid);
         // for (auto i : rptrs) {
         //     std::cout << (uint32_t)i  << " " ;
         // }
@@ -637,8 +637,10 @@ HtFrameExchangeManager::SendDataFrame(Ptr<WifiMpdu> peekedItem,
     if (edca->GetMsduGrouper()) {
         edca->GetMsduGrouper()->ResetInflighedCnt();
     }
+
     std::vector<Ptr<WifiMpdu>> mpduList =
         m_mpduAggregator->GetNextAmpdu(mpdu, txParams, availableTime);
+    // std::cout << "发送： " << mpdu->GetHeader().GetSequenceNumber() << " " << mpduList.size() << std::endl;
     NS_ASSERT(txParams.m_acknowledgment);
     if (m_mac->GetNLinks() > 1 && edca->GetMsduGrouper()) {
        bool flag = edca->GetMsduGrouper()->UpdateAmpduSize(m_linkId, mpduList.size());

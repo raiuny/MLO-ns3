@@ -1066,7 +1066,6 @@ CtrlBAckResponseHeader::IsInBitmap(uint16_t seq, std::size_t index) const
     {
         nAckedMpdus = nAckedMpdus / 16;
     }
-
     return (seq - m_baInfo[index].m_startingSeq + SEQNO_SPACE_SIZE) % SEQNO_SPACE_SIZE <
            nAckedMpdus;
 }

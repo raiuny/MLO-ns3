@@ -48,13 +48,13 @@ RecipientBlockAckAgreement::RecipientBlockAckAgreement(Mac48Address originator,
     m_timeout = timeout;
     m_startingSeq = startingSeq;
     m_htSupported = htSupported;
-    std::cout << "RecipientBlockAckAgreement: " << std::to_string(m_startingSeq) << " originator:" << originator << " m_bufferSize: " << std::to_string(m_bufferSize) << std::endl;
+    std::cout << "RecipientBlockAckAgreement: " << std::to_string(m_startingSeq) << " originator:" << originator << " m_bufferSize: " << std::to_string(m_bufferSize) << " mode: " << mode << std::endl;
     m_scoreboard.Init(startingSeq, bufferSize);
     m_scoreboard_asyn.resize(2);
     for (auto & board : m_scoreboard_asyn) {
         board.Init(startingSeq, bufferSize);
     }
-    m_mode = mode;
+    m_mode = 1;
     m_winStartB = startingSeq;
     m_winSizeB = bufferSize;
 }
@@ -185,11 +185,10 @@ RecipientBlockAckAgreement::NotifyReceivedMpdu(Ptr<const WifiMpdu> mpdu, uint8_t
         else if (distance < SEQNO_SPACE_HALF_SIZE)
         {
             m_scoreboard_asyn[linkId].Advance(distance - m_scoreboard_asyn[linkId].GetWinSize() + 1);
-            m_scoreboard_asyn[linkId].At(m_scoreboard.GetWinSize() - 1) = true;
+            m_scoreboard_asyn[linkId].At(m_scoreboard_asyn[linkId].GetWinSize() - 1) = true;
         }
 
         distance = GetDistance(mpduSeqNumber, m_winStartB);
-        // if(flag) std::cout << "new distance: "<< distance << std::endl;
         /* Update the receive reordering buffer (see Section 10.24.7.6.2 of 802.11-2016) */
         if (distance < m_winSizeB)
         {
@@ -331,7 +330,11 @@ RecipientBlockAckAgreement::FillBlockAckBitmap(CtrlBAckResponseHeader* blockAckH
         // Control subfield of the BlockAck frame shall be set to any value in the
         // range (WinEndR – 63) to WinStartR (Sec. 10.24.7.5 of 802.11-2016).
         // We set it to WinStartR
-        uint16_t ssn = m_scoreboard.GetWinStart();
+        uint16_t ssn;
+        if (m_mode == 0) 
+            ssn = m_scoreboard.GetWinStart();
+        else
+            ssn = m_scoreboard_asyn[linkId].GetWinStart(); 
         NS_LOG_DEBUG("SSN=" << ssn);
         blockAckHeader->SetStartingSequence(ssn, index);
         blockAckHeader->ResetBitmap(index);
@@ -346,7 +349,7 @@ RecipientBlockAckAgreement::FillBlockAckBitmap(CtrlBAckResponseHeader* blockAckH
             }
         } else {
             for (std::size_t i = 0; i < m_scoreboard_asyn[linkId].GetWinSize(); i++)
-            {
+            {   
                 if (m_scoreboard_asyn[linkId].At(i))
                 {
                     blockAckHeader->SetReceivedPacket((ssn + i) % SEQNO_SPACE_SIZE, index);

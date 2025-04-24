@@ -291,7 +291,6 @@ QosFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca,
     if (!item)
     {
         NS_LOG_DEBUG("Not enough time to transmit a frame");
-        // std::cout << "Not enough time to transmit a frame" << std::endl;
         return false;
     }
 

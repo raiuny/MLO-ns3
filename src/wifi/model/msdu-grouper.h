@@ -28,24 +28,7 @@ struct WiFiBawQueueIt
 };
 
 struct MPDUInfo
-{
-    // MPDUInfo() = default;
-    // MPDUInfo(const MPDUInfo& other)
-    //     : m_Uid(other.m_Uid),
-    //       m_receiver(other.m_receiver),
-    //       m_size(other.m_size),
-    //       m_msduNum(other.m_msduNum),
-    //       m_mpduSeqNo(other.m_mpduSeqNo),
-    //       m_rxstate(other.m_rxstate),
-    //       m_txcount(other.m_txcount),
-    //       m_linkIds(other.m_linkIds),
-    //       m_txTime(other.m_txTime),
-    //       m_ackTime(other.m_ackTime),
-    //       DataRate(other.DataRate),
-    //       noisePower(other.noisePower),
-    //       signalPower(other.signalPower)
-    // {}
-    
+{    
     uint32_t m_Uid;
     Mac48Address m_receiver;
     uint32_t m_size;
@@ -73,7 +56,7 @@ struct PPDUInfo
 class QueueStats
 {
 public:
-    QueueStats(Time period);
+    QueueStats(Time period, Ptr<WifiMac> mac);
     QueueStats();
     ~QueueStats();
     bool Initialize();
@@ -144,6 +127,7 @@ public:
     std::vector<Time> blockwindows;
     std::vector<Time> blockwindows_Total;
     std::map<std::pair<Mac48Address, uint8_t>, std::vector<WiFiBawQueueIt>> m_bawqueue;
+    Ptr<WifiMac> m_mac;
 };
 
 struct mldParams {

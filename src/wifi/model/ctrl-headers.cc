@@ -15,7 +15,7 @@
 #include "ns3/he-phy.h"
 
 #include <algorithm>
-
+#include <iomanip>
 namespace ns3
 {
 
@@ -293,8 +293,15 @@ CtrlBAckResponseHeader::Print(std::ostream& os) const
 {
     if (m_baType.m_variant != BlockAckType::MULTI_STA)
     {
-        os << "TID_INFO=" << m_tidInfo << ", StartingSeq=0x" << std::hex
-           << m_baInfo[0].m_startingSeq << std::dec;
+        // os << "TID_INFO=" << m_tidInfo << ", StartingSeq=0x" << std::hex
+        //    << m_baInfo[0].m_startingSeq << std::dec;
+
+        os << "TID_INFO=" << m_tidInfo << ", StartingSeq=" << m_baInfo[0].m_startingSeq << std::dec;
+        os << std::endl << "bitmap = 0x";
+        for(const auto & b : m_baInfo[0].m_bitmap) {
+            os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(b) << " ";
+        }
+        os << std::endl << std::dec;
     }
     else
     {

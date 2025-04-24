@@ -772,7 +772,7 @@ Txop::DoInitialize()
         GenerateBackoff(id);
     }
     // The initialization of m_queue and m_mac has been completed.
-    if (m_mode) {
+    if (m_mode & 0x03) {
         m_grouper = Create<MsduGrouper>(m_maxGroupSize, 4096, m_queue, m_mac, m_mode, m_period);
         if (m_gs_enable) m_grouper->EnableGridSearch(m_jsonFileName);
         if (m_param_update) m_grouper->EnableParamUpdate();

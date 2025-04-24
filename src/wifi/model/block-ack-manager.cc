@@ -129,7 +129,6 @@ BlockAckManager::CreateOriginatorAgreement(const MgtAddBaRequestHeader& reqHdr,
         NS_ASSERT_MSG(existingAgreement->get().IsReset(),
                       "Existing agreement must be in RESET state");
     }
-    std::cout << "Create Originator Aggreements: " << " recipient = " << recipient << std::endl;
     m_originatorAgreements.insert_or_assign({recipient, tid},
                                             std::make_pair(std::move(agreement), PacketQueue{}));
     m_blockPackets(recipient, tid);
@@ -218,7 +217,6 @@ BlockAckManager::CreateRecipientAgreement(const MgtAddBaResponseHeader& respHdr,
     {
         agreement.SetDelayedBlockAck();
     }
-    // std::cout << "CreateRecipientBlockAckAgreement: originator: " << originator << " tid: " << tid << std::endl;
     m_recipientAgreements.insert_or_assign({originator, tid}, agreement);
 }
 
@@ -382,6 +380,12 @@ BlockAckManager::NotifyGotAck(uint8_t linkId, Ptr<const WifiMpdu> mpdu)
 
     it->second.first.NotifyAckedMpdu(mpdu);
 
+    if (m_mode) {
+        NS_ASSERT(m_linkRPtrSyncEnabled[linkId]);
+        it->second.first.m_linkRPtr[linkId] = it->second.first.m_txWindow.GetWinStart();
+        SyncRptr(recipient, tid, linkId);
+    }
+    
     // remove the acknowledged frame from the queue of outstanding packets
     for (auto queueIt = it->second.second.begin(); queueIt != it->second.second.end(); ++queueIt)
     {
@@ -467,7 +471,8 @@ BlockAckManager::NotifyGotBlockAck(uint8_t linkId,
     NS_ASSERT(blockAck.IsCompressed() || blockAck.IsExtendedCompressed() || blockAck.IsMultiSta());
     Time now = Simulator::Now();
     std::list<Ptr<const WifiMpdu>> acked;
-
+    // std::cout << "Got Block Ack on Link " << (uint32_t)linkId << std::endl;
+    // blockAck.Print(std::cout);
     for (auto queueIt = it->second.second.begin(); queueIt != it->second.second.end();)
     {
         uint16_t currentSeq = (*queueIt)->GetHeader().GetSequenceNumber();
@@ -477,7 +482,7 @@ BlockAckManager::NotifyGotBlockAck(uint8_t linkId,
             it->second.first.NotifyAckedMpdu(*queueIt);
 
             // 海思新架构模拟
-            // 移动读指针
+            // 移动读指针到最新，与全局读指针保持一致
             if (m_mode) {
                 NS_ASSERT(m_linkRPtrSyncEnabled[linkId]);
                 it->second.first.m_linkRPtr[linkId] = it->second.first.m_txWindow.GetWinStart();
@@ -932,14 +937,30 @@ BlockAckManager::SyncRptr(const Mac48Address& recipient, uint8_t tid, uint8_t li
         for (size_t i = 0; i < it->second.first.m_linkRPtr.size(); i++) {
             auto d = it->second.first.GetDistance(it->second.first.m_linkRPtr[i]);
             if (i!= linkId && m_linkRPtrSyncEnabled[i] && d > distance) {
-                // std::cout << "同步Rptr: recipient: " << recipient << " tid: " << (uint32_t) tid << std::endl;
-                // std::cout << "Update: (" << uint32_t(i) << ") " << "From " << it->second.first.m_linkRPtr[i] << " to " << it->second.first.m_linkRPtr[linkId] << std::endl;
+                // std::cout << "同步读指针: recipient: " << recipient << " tid: " << (uint32_t) tid << std::endl;
+                // std::cout << "Update: (Link " << uint32_t(i) << ") " << "From " << it->second.first.m_linkRPtr[i] << " to " << it->second.first.m_linkRPtr[linkId] << std::endl;
                 it->second.first.m_linkRPtr[i] = it->second.first.m_linkRPtr[linkId];
             }
         }
     }
 }
 
+void
+BlockAckManager::UpdateRptr(const Mac48Address& recipient, uint8_t tid, uint8_t linkId) {
+    if (!m_mode) return;
+    auto it = m_originatorAgreements.find({recipient, tid});
+    if (it != m_originatorAgreements.end())
+    {
+        uint32_t distance = it->second.first.GetDistance(it->second.first.m_linkRPtr[linkId]);
+        std::vector<uint32_t> other_distance;
+        for (size_t i = 0; i < it->second.first.m_linkRPtr.size(); i++) {
+            auto d = it->second.first.GetDistance(it->second.first.m_linkRPtr[i]);
+            if (i != linkId && d < distance) {
+                it->second.first.m_linkRPtr[linkId] = it->second.first.m_linkRPtr[i];
+            }
+        }
+    }
+}
 void
 BlockAckManager::UpdateLinkRPtrSyncEnabled(uint8_t linkId, bool txStatus)
 {

@@ -1,10 +1,9 @@
-#include "msdu-grouper.h"
-
 #include "ns3/ampdu-subframe-header.h"
 #include "ns3/frame-exchange-manager.h"
 #include "ns3/msdu-aggregator.h"
 #include "ns3/wifi-tx-vector.h"
 
+#include "msdu-grouper.h"
 #include <iostream>
 
 namespace ns3
@@ -13,7 +12,7 @@ namespace ns3
 NS_LOG_COMPONENT_DEFINE("MsduGrouper");
 NS_OBJECT_ENSURE_REGISTERED(MsduGrouper);
 
-QueueStats::QueueStats(Time period)
+QueueStats::QueueStats(Time period, Ptr<WifiMac> mac)
 {
     cycle_time = period;
     m_initialized = false;
@@ -23,6 +22,7 @@ QueueStats::QueueStats(Time period)
     m_blockCnt_tr_prev = {0, 0};
     blockwindows = {Seconds(0), Seconds(0)};
     blockwindows_Total = {Seconds(0), Seconds(0)};
+    m_mac = mac;
 }
 
 QueueStats::QueueStats()
@@ -276,10 +276,14 @@ QueueStats::Pop(Ptr<const WifiMpdu> mpdu, bool ackordiscard)
         return false;
     Mac48Address recipient = mpdu->GetOriginal()->GetHeader().GetAddr1();
     uint8_t tid = mpdu->GetHeader().GetQosTid();
-    if (recipient == Mac48Address("00:00:00:00:00:03") ||
-        recipient == Mac48Address("00:00:00:00:00:02"))
+    // if (recipient == Mac48Address("00:00:00:00:00:03") ||
+    //     recipient == Mac48Address("00:00:00:00:00:02"))
+    // {
+    //     recipient = Mac48Address("00:00:00:00:00:01");
+    // }
+    if (auto recipientMld = m_mac->GetMldAddress(recipient))
     {
-        recipient = Mac48Address("00:00:00:00:00:01");
+        recipient = *recipientMld;
     }
     std::vector<WiFiBawQueueIt>& queueit = m_bawqueue.find({recipient, tid})->second;
     uint16_t seqNo = mpdu->GetHeader().GetSequenceNumber();
@@ -338,7 +342,7 @@ MsduGrouper::MsduGrouper(uint32_t maxGroupSize,
     m_redundancyThreshold = {50, 50};
     m_maxAmpduSize = {0, 0};
     m_startTime = Seconds(1);
-    m_queueStats = QueueStats(m_period);
+    m_queueStats = QueueStats(m_period, mac);
     m_maxRedundantPackets = {2, 2};
     m_RedundantPacketCnt = {0, 0};
     m_redundancyFixedNumber = 0;
@@ -470,7 +474,7 @@ MsduGrouper::AddCurrentGroup(uint32_t itemgroup)
         m_currentGroup = (m_currentGroup + 1) % m_maxGroupNumber;
         m_currentCount = 0;
         m_firstMsdu = nullptr;
-        // std::cout<<"current group add to " << m_currentGroup<<std::endl;
+        // std::cout << "current group add to " << m_currentGroup << std::endl;
         // NS_LOG_DEBUG ("current group add to " << m_currentGroup);
     }
 }
@@ -585,7 +589,6 @@ MsduGrouper::NotifyPhyTxEvent(Ptr<const Packet> packet,
         extractedLength = subHdr.GetLength();
         p = p->CreateFragment(0, static_cast<uint32_t>(extractedLength));
     }
-    // Mac48Address mldAddress = m_mac->GetMldAddress(staId);
     WifiMacHeader hdr;
     p->PeekHeader(hdr);
     if (!hdr.IsQosData() || !hdr.HasData())
@@ -628,11 +631,15 @@ MsduGrouper::NotifyPhyTxEvent(Ptr<const Packet> packet,
     }
     Mac48Address recipient = hdr.GetAddr1();
     uint8_t tid = hdr.GetQosTid();
-    if (recipient == Mac48Address("00:00:00:00:00:03") ||
-        recipient == Mac48Address("00:00:00:00:00:02"))
+    if (auto recipientMld = m_mac->GetMldAddress(recipient))
     {
-        recipient = Mac48Address("00:00:00:00:00:01");
+        recipient = *recipientMld;
     }
+    // if (recipient == Mac48Address("00:00:00:00:00:03") ||
+    //     recipient == Mac48Address("00:00:00:00:00:02"))
+    // {
+    //     recipient = Mac48Address("00:00:00:00:00:01");
+    // }
     auto& queue = m_queueStats.m_bawqueue.find({recipient, tid})->second;
     uint16_t seqNo = hdr.GetSequenceNumber();
     auto queueit = std::find_if(queue.begin(), queue.end(), [&seqNo](const WiFiBawQueueIt& it) {
@@ -701,25 +708,19 @@ MsduGrouper::UpdateAmpduSize(uint8_t linkId, uint32_t size)
 {
     if (!m_mode)
         return false;
-    if (size)
-    {
-        // if (m_txopTimeEnd[linkId] == 0)
-        //     m_txopNumList[linkId].push_back(size);
-    }
-    // if (linkId == 0) std::cout << "MAC ADDR: " << m_mac->GetAddress() <<  " m_maxAmpduSize: " <<
-    // size << " LinkId: " << uint32_t(linkId) << "最大聚合数：" << m_maxAmpduSize[linkId] <<
-    // std::endl;
     if (size > m_maxAmpduSize[linkId])
     {
         m_maxAmpduSize[linkId] = size;
     }
-    if (Simulator::Now() > m_startTime + MilliSeconds(100))
+    if (Simulator::Now() > m_startTime + MilliSeconds(10))
     {
+        // if (size == 0) std::cout << Simulator::Now() << " 卡窗, 无包可传 on Link " << (uint32_t)linkId << std::endl;
         if (size < GetBAWindowThreshold(linkId))
         {       
             m_blockrateList[linkId].push_back((double)size / m_maxAmpduSize[linkId]);
             if (!m_queueStats.blockwindows[linkId].IsStrictlyPositive()) {
                 m_queueStats.blockwindows[linkId] = Simulator::Now();
+                // std::cout << Simulator::Now() << " 卡窗开始 on Link " << (uint32_t)linkId << std::endl;
                 m_queueStats.m_blockCnt[linkId] += 1;
             }
             if (m_inflighted[1 - linkId])
@@ -731,11 +732,13 @@ MsduGrouper::UpdateAmpduSize(uint8_t linkId, uint32_t size)
             {
                 m_queueStats.blockwindows_Total[linkId] +=
                     Simulator::Now() - m_queueStats.blockwindows[linkId];
+                // std::cout << Simulator::Now() << " 卡窗结束 on Link " << (uint32_t)linkId << std::endl;
                 m_queueStats.blockwindows[linkId] = Seconds(0);
             }
         }
     }
 
+    // 冗余模式设置
     // if (size == 1)
     //     return false;
     // if (Simulator::Now().GetSeconds() > m_startTime + 1 && size < GetBAWindowThreshold(linkId) *

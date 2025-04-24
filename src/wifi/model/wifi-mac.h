@@ -948,6 +948,8 @@ class WifiMac : public Object
     Callback<void> m_linkUp;   //!< Callback when a link is up
     Callback<void> m_linkDown; //!< Callback when a link is down
 
+    std::vector<bool> m_linkTxStatus; //!< Vector indicating whether each link is enabled for transmission
+    
   private:
     /**
      * Complete the configuration of the MAC layer components.
@@ -1356,7 +1358,6 @@ class WifiMac : public Object
 
     IcfDropTracedCallback m_icfDropCallback; //!< traced callback for ICF drop events
 
-    std::vector<bool> m_linkTxStatus; //!< Vector indicating whether each link is enabled for transmission
 };
 
 } // namespace ns3

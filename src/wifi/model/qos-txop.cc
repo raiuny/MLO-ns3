@@ -176,7 +176,7 @@ QosTxop::DoInitialize()
     NS_LOG_FUNCTION(this);
     Txop::DoInitialize();
     m_baManager->SetMode(m_mode);
-    if(m_mode){
+    if(m_mode & 0x03){
         for(uint8_t i = 0; i < m_mac->GetNLinks(); i++)
         {
             m_mac->GetFrameExchangeManager(i)->TraceConnectWithoutContext("AckedMpdu",
@@ -466,7 +466,7 @@ QosTxop::PeekNextMpdu(uint8_t linkId, uint8_t tid, Mac48Address recipient, Ptr<c
             continue;
         }
 
-        if ( m_mode == 2 )
+        if ( m_mode & 0x02 )
         {   
             // std::cout << "mode 2" << IsLinkAllocated(linkId, item->GetAllocatedLink()) << std::endl;
             if(!IsLinkAllocated(linkId, item->GetAllocatedLink()) && item->GetPacket()->GetAdjustment() != item->GetPacketSize())
@@ -526,7 +526,7 @@ QosTxop::PeekNextMpdu(uint8_t linkId, uint8_t tid, Mac48Address recipient, Ptr<c
                 continue;
             }
         }
-        else if ( m_mode == 1 )
+        else if ( m_mode & 0x01 )
         {
             // if (m_link_up & (1 << linkId) != 1) return nullptr;
             if (auto linkIds = item->GetInFlightLinkIds(); !linkIds.empty()) // MPDU is in-flight
@@ -558,7 +558,7 @@ QosTxop::PeekNextMpdu(uint8_t linkId, uint8_t tid, Mac48Address recipient, Ptr<c
                 continue;
             }
         }
-        else if( m_mode == 0 ) // 默认模式
+        else  // 默认模式
         {
             if (auto linkIds = item->GetInFlightLinkIds(); !linkIds.empty()) // MPDU is in-flight
             {
@@ -704,7 +704,7 @@ QosTxop::GetNextMpdu(uint8_t linkId,
         mpdu = peekedItem; 
     }
 
-    if(mpdu->GetHeader().IsQosData() && m_mode)
+    if(mpdu->GetHeader().IsQosData() && m_mode & 0x03)
     {
         // 打断当前分组，增加组号
         Ptr<QosTxop> edca = m_mac->GetQosTxop(mpdu->GetHeader().GetQosTid());
@@ -716,7 +716,7 @@ QosTxop::GetNextMpdu(uint8_t linkId,
     AssignSequenceNumber(mpdu); // 模式二下，曾经跳过发送的MPDU已经分配序列号，不会再次分配
 
     NS_LOG_DEBUG("Got MPDU from EDCA queue: " << *mpdu);
-    if (m_mode == 1)
+    if (m_mode & 0x01)
         GetMsduGrouper()->NotifyPacketEnqueue(mpdu, firstAssignSeqNo);
     return mpdu;
 }
@@ -743,7 +743,7 @@ QosTxop::NotifyChannelAccessed(uint8_t linkId, Time txopDuration)
     GetLink(linkId).startTxop = Simulator::Now();
     GetLink(linkId).txopDuration = txopDuration;
     Txop::NotifyChannelAccessed(linkId);
-    if (m_mode)
+    if (m_mode & 0x03)
         GetMsduGrouper()->m_txopTimeBegin[linkId] = Simulator::Now().GetMicroSeconds();
 }
 
@@ -791,7 +791,7 @@ QosTxop::NotifyChannelReleased(uint8_t linkId)
     link.startTxop.reset();
     GetLink(linkId).access = NOT_REQUESTED;
 
-    if (m_mode) {
+    if (m_mode & 0x03) {
         GetMsduGrouper()->SetTxopTimeEnd(Simulator::Now().GetMicroSeconds(), linkId);
         if(GetMsduGrouper()->IsParamUpdateEnabled()) SetTxopLimit(MicroSeconds(m_alg_txop_limits[linkId]) * 32, linkId);
     }
@@ -971,7 +971,7 @@ QosTxop::GetAccessCategory() const
 void 
 QosTxop::ScheduleUpdateEdcaParameters(Time period)
 {
-    if (!m_mode || m_mac->GetNLinks() < 2)
+    if (!(m_mode & 0x03) || m_mac->GetNLinks() < 2)
         return;
     if (m_ac != AC_BE)
         return;
@@ -1159,7 +1159,7 @@ QosTxop::ScheduleUpdateEdcaParameters(Time period)
 bool 
 QosTxop::IsLinkUp(uint8_t linkId)
 {
-    if(m_mode == 0) return true;
+    if(!(m_mode & 0x03)) return true;
     return m_link_up & (1 << linkId);
 }
 

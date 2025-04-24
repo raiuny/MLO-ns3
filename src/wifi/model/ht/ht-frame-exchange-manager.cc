@@ -368,22 +368,22 @@ HtFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
     }
     
     //海思新架构模拟
-    //发送前同步
+    //发送前更新自己读指针到最新
     if(m_mac->GetNLinks() > 1 && peekedItem->GetHeader().IsQosData() && !peekedItem->GetHeader().GetAddr1().IsBroadcast()){
         uint8_t tid = peekedItem->GetQueueAc();
         for (const auto& linkId : m_mac->GetLinkIds())
         {
             GetBaManager(tid)->UpdateLinkRPtrSyncEnabled(linkId, m_mac->GetLinkTxStatus()[linkId]);
         }
-        // std::cout << "同步前： " << std::endl;
+        // std::cout << "读指针更新前： " << std::endl;
         // std::vector<uint16_t> rptrs = GetBaManager(tid)->GetRptr(peekedItem->GetHeader().GetAddr1(), tid);
         // for (auto i : rptrs) {
         //     std::cout << (uint32_t)i  << " " ;
         // }
-        // std::cout << std::endl << "同步后：\n" ;
-        GetBaManager(tid)->SyncRptr(peekedItem->GetHeader().GetAddr1(), tid, m_linkId); //同步该链路的信息到其他链路
+        // std::cout << std::endl << "读指针更新后：\n" ;
+        GetBaManager(tid)->UpdateRptr(peekedItem->GetHeader().GetAddr1(), tid, m_linkId); // 更新自己的读指针 max(2G, 5G)
 
-        // auto rptrs = GetBaManager(tid)->GetRptr(peekedItem->GetHeader().GetAddr1(), tid);
+        // rptrs = GetBaManager(tid)->GetRptr(peekedItem->GetHeader().GetAddr1(), tid);
         // for (auto i : rptrs) {
         //     std::cout << (uint32_t)i  << " " ;
         // }
@@ -629,7 +629,6 @@ HtFrameExchangeManager::SendDataFrame(Ptr<WifiMpdu> peekedItem,
     if (!mpdu)
     {
         NS_LOG_DEBUG("Not enough time to transmit a frame");
-        // std::cout << "Not enough time to transmit a frame" << std::endl;
         return false;
     }
 
@@ -649,6 +648,12 @@ HtFrameExchangeManager::SendDataFrame(Ptr<WifiMpdu> peekedItem,
            edca->GetMsduGrouper()->ResetRedundancyMode(m_linkId);
        }
     }
+    
+    // std::cout << Simulator::Now() << " SendDataFrame on Link " << (uint32_t)m_linkId << std::endl << "[";
+    // for (const auto & it : mpduList) {
+    //     std::cout << it->GetHeader().GetSequenceNumber() << ", ";
+    // }
+    // std::cout << "], 长度 = " << mpduList.size() << std::endl;
     if (mpduList.size() > 1)
     {
         // A-MPDU aggregation succeeded
@@ -727,6 +732,13 @@ HtFrameExchangeManager::NotifyReceivedNormalAck(Ptr<WifiMpdu> mpdu)
 
         if (m_mac->GetBaAgreementEstablishedAsOriginator(mpdu->GetHeader().GetAddr1(), tid))
         {
+            if (m_mac->GetNLinks() > 1)
+            {
+                for (const auto& linkId : m_mac->GetLinkIds())
+                {
+                    GetBaManager(tid)->UpdateLinkRPtrSyncEnabled(linkId, m_mac->GetLinkTxStatus()[linkId]);
+                }
+            }
             // notify the BA manager that the MPDU was acknowledged
             edca->GetBaManager()->NotifyGotAck(m_linkId, mpdu);
         }
@@ -1529,7 +1541,8 @@ HtFrameExchangeManager::SendBlockAck(const RecipientBlockAckAgreement& agreement
     blockAck.SetType(agreement.GetBlockAckType());
     blockAck.SetTidInfo(agreement.GetTid());
     agreement.FillBlockAckBitmap(&blockAck, m_linkId);
-
+    // std::cout << Simulator::Now() << " Send Block Ack: ";
+    // blockAck.Print(std::cout);
     Ptr<Packet> packet = Create<Packet>();
     packet->AddHeader(blockAck);
     Ptr<WifiPsdu> psdu = GetWifiPsdu(Create<WifiMpdu>(packet, hdr), blockAckTxVector);
@@ -1751,6 +1764,7 @@ HtFrameExchangeManager::ReceiveMgtAction(Ptr<const WifiMpdu> mpdu, const WifiTxV
             // We've received an ADDBA Request. Our policy here is to automatically accept it,
             // so we get the ADDBA Response on its way as soon as we finish transmitting the Ack,
             // to avoid to concurrently send Ack and ADDBA Response in case of multi-link devices
+            std::cout << m_mac->GetAddress() << " Send ADDBAResponse, originator: " << *GetWifiRemoteStationManager()->GetMldAddress(from) << std::endl;
             Simulator::Schedule(m_phy->GetSifs() + ackTxTime,
                                 &HtFrameExchangeManager::SendAddBaResponse,
                                 this,

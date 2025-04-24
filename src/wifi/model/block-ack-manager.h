@@ -444,12 +444,20 @@ class BlockAckManager : public Object
     uint16_t GetOriginatorRptr(const Mac48Address& recipient, uint8_t tid, uint8_t linkId) const;
 
     /**
-     * Reset read pointers after block ack.
+     * SyncRptr read pointers after block ack.
      *
      * \param recipient the recipient MAC address  
      * \param tid Traffic ID
      */
     void SyncRptr(const Mac48Address& recipient, uint8_t tid, uint8_t linkId);
+
+    /**
+     * Update read pointers before send dataframe.
+     *
+     * \param recipient the recipient MAC address  
+     * \param tid Traffic ID
+     */
+    void UpdateRptr(const Mac48Address& recipient, uint8_t tid, uint8_t linkId);
 
     /**
      * Set whether a link is in TX or ACK mode.

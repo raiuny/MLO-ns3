@@ -495,7 +495,7 @@ QosTxop::PeekNextMpdu(uint8_t linkId, uint8_t tid, Mac48Address recipient, Ptr<c
                     }
                 }
 
-                bool firstAssignSeqNo = (!mpdu->IsFragment() && !mpdu->HasSeqNoAssigned());
+                bool firstAssignSeqNo = (!item->IsFragment() && !item->HasSeqNoAssigned());
                 AssignSequenceNumber(item); //真正分配序列号  
                 GetMsduGrouper()->NotifyPacketEnqueue(item, firstAssignSeqNo);
                 NS_LOG_DEBUG("Skipping frames that are not assigned to this link " << item->GetHeader().GetSequenceNumber());
@@ -506,6 +506,8 @@ QosTxop::PeekNextMpdu(uint8_t linkId, uint8_t tid, Mac48Address recipient, Ptr<c
             if (auto linkIds = item->GetInFlightLinkIds(); !linkIds.empty()) // MPDU is in-flight
             {
                 // This MPDU has already been sent on other links, but can still be sent on this link.
+                // mode2 中在其他链路上发送过的肯定是未分配到当前链路上的
+                // 冗余个数不如设置为另一条链路的平均聚合个数*失败率
                 if (!linkIds.contains(linkId))
                 {
                     NS_LOG_DEBUG(*item <<" This MPDU has already been sent on other links, but can still be sent on link "<<+linkId);
@@ -716,7 +718,7 @@ QosTxop::GetNextMpdu(uint8_t linkId,
     AssignSequenceNumber(mpdu); // 模式二下，曾经跳过发送的MPDU已经分配序列号，不会再次分配
 
     NS_LOG_DEBUG("Got MPDU from EDCA queue: " << *mpdu);
-    if (m_mode & 0x01)
+    if (m_mode & 0x03)
         GetMsduGrouper()->NotifyPacketEnqueue(mpdu, firstAssignSeqNo);
     return mpdu;
 }
@@ -975,6 +977,18 @@ QosTxop::ScheduleUpdateEdcaParameters(Time period)
         return;
     if (m_ac != AC_BE)
         return;
+    std::cout<<"************Time: "<<Simulator::Now().GetSeconds()<<"s************"<<std::endl;
+    std::cout << "s, MAC ADDR: " << m_mac->GetAddress() << ": ("<< m_mode << "," << m_ac << ")" << std::endl;
+
+    std::cout <<"-----set-----"<<std::endl;
+    std::cout << "MAC ADDR: " << m_mac->GetAddress() << ": (" << m_mode << "," << m_ac << ")"<< std::endl;
+    std::cout << "CWmins " << GetMinCws()[0] << " " << GetMinCws()[1] << std::endl;
+    std::cout << "CWmaxs " << GetMaxCws()[0] << " " << GetMaxCws()[1] << std::endl; // 15, 1023
+    std::cout << "Aifsns " << (uint32_t)GetAifsns()[0] << " " << (uint32_t)GetAifsns()[1] << std::endl; // 3,3
+    std::cout << "TxopLimits " << GetTxopLimits()[0] << " " << GetTxopLimits()[1] << std::endl; // 0ns
+    std::cout << "BE_MaxAmpduSize " << m_mac->GetMaxAmpduSize(m_ac) << std::endl; 
+    std::cout << "link1Pct " << GetMsduGrouper()->GetLink1Pct() << std::endl; 
+    std::cout << "MaxGroupSize " << GetMsduGrouper()->GetMaxGroupSize() << std::endl; 
     double Thp1 = GetMsduGrouper()->GetQueueStats().GetThroughput(0x00);
     double Thp2 = GetMsduGrouper()->GetQueueStats().GetThroughput(0x01);
     double s1 = GetMsduGrouper()->GetQueueStats().GetMpduSuccessRate(0x00);
@@ -1055,6 +1069,7 @@ QosTxop::ScheduleUpdateEdcaParameters(Time period)
         }
         if (!TracedParamsAndStats.IsEmpty())
             TracedParamsAndStats(params,
+                                 GetMsduGrouper()->GetLink1Pct(),
                                  {Thp1, Thp2},
                                  {s1, s2},
                                  {chanrate1, chanrate2},

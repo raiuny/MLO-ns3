@@ -19,8 +19,8 @@ def get_y(type_):
 
 fig, ax = plt.subplots(figsize=(16, 4))
 
-begin = 1080000
-end = 1090000
+begin = 1100000
+end = 1120000
 for idx, row in df.iterrows():
     x_start = row.iloc[1]
     x_end = row.iloc[2]

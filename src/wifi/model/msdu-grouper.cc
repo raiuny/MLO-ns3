@@ -427,42 +427,44 @@ MsduGrouper::AggregateMsdu(Ptr<WifiMpdu> msdu)
 {
     if (m_mode == 0)
         return;
-    m_enqueueNum ++;
+    m_enqueueNum++;
     m_queueIds.insert(WifiMacQueueContainer::GetQueueId(msdu));
     if (m_queueIds.size() >= 2) {
-        NS_LOG_WARN("WifiContainerQueueId: Detected two different queue IDs");
+        NS_LOG_WARN("Detected two different queue IDs");
     }
 
-    if (m_currentCount >= m_maxGroupSize)
-    {
-        // 如果当前组已满，则移动到下一组
+    // 检查是否需要切换组
+    if (m_currentCount >= m_maxGroupSize) {
         m_currentGroup = (m_currentGroup + 1) % m_maxGroupNumber;
-        // 聚合完成入队
+        m_currentCount = 0;
         m_firstMsdu = nullptr;
     }
 
+    // 设置当前MSDU的组号并递增计数器
     msdu->SetGroupNumber(m_currentGroup);
-    m_currentCount = (m_currentCount + 1) % m_maxGroupSize;
-    // 如果当前组只有一个MSDU，则将其设置为第一个MSDU并返回
-    if (m_currentCount == 1)
-    {
+    m_currentCount++;
+
+    // 处理首个MSDU或聚合逻辑
+    if (m_currentCount == 1) {
         m_firstMsdu = msdu;
-        if (m_mode == 2)
-        {
+        if (m_mode == 2) {
             AssignAmsduByPr();
-            return;
+        }
+    } else {
+        // 聚合到首个MSDU
+        if (m_firstMsdu && m_firstMsdu->GetGroupNumber() == msdu->GetGroupNumber() && m_firstMsdu != msdu) {
+        //  std::cout<<"Aggregate MSDU ( " << msdu <<" groupNumber "<<m_currentGroup<<" ) into AMSDU "<<m_firstMsdu->GetSize()<<std::endl;
+            m_queue->DequeueIfQueued({m_firstMsdu});
+            m_firstMsdu->Aggregate(msdu);
+            m_queue->Replace(msdu, m_firstMsdu);
         }
     }
 
-    // 如果当前组有多个MSDU，则将当前MSDU与前一个MSDU聚合
-    if (m_firstMsdu && m_firstMsdu->GetGroupNumber() == msdu->GetGroupNumber() &&
-        m_firstMsdu != msdu)
-    {
-        // NS_LOG_DEBUG("Aggregate MSDU ( " << msdu <<" groupNumber "<<m_currentGroup<<" ) into
-        // AMSDU "<<m_firstMsdu->GetSize());
-        m_queue->DequeueIfQueued({m_firstMsdu});
-        m_firstMsdu->Aggregate(msdu);
-        m_queue->Replace(msdu, m_firstMsdu);
+    // 组满后准备切换
+    if (m_currentCount == m_maxGroupSize) {
+        m_currentGroup = (m_currentGroup + 1) % m_maxGroupNumber;
+        m_currentCount = 0;
+        m_firstMsdu = nullptr;
     }
 }
 
@@ -916,5 +918,31 @@ MsduGrouper::ClearStats()
     m_maxAmpduSize = {0, 0};
     m_startTime = Simulator::Now();
 }
+
+void
+MsduGrouper::ResetEnqueueNum(){
+    m_enqueueNum = 0;
+}
+
+void
+MsduGrouper::SetLink1Pct(double link1Pct){
+    m_link1Pct = std::round(link1Pct * 1000) / 1000;
+}
+
+double
+MsduGrouper::GetLink1Pct(){
+    return m_link1Pct;
+}
+
+uint32_t
+MsduGrouper::GetMaxGroupSize(){
+    return m_maxGroupSize;
+}
+
+Time
+MsduGrouper::GetStartTime(){
+    return m_startTime;
+}
+
 
 } // namespace ns3

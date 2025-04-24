@@ -471,8 +471,8 @@ BlockAckManager::NotifyGotBlockAck(uint8_t linkId,
     NS_ASSERT(blockAck.IsCompressed() || blockAck.IsExtendedCompressed() || blockAck.IsMultiSta());
     Time now = Simulator::Now();
     std::list<Ptr<const WifiMpdu>> acked;
-    // std::cout << "Got Block Ack on Link " << (uint32_t)linkId << std::endl;
-    // blockAck.Print(std::cout);
+    std::cout << "Got Block Ack on Link " << (uint32_t)linkId << std::endl;
+    blockAck.Print(std::cout);
     for (auto queueIt = it->second.second.begin(); queueIt != it->second.second.end();)
     {
         uint16_t currentSeq = (*queueIt)->GetHeader().GetSequenceNumber();

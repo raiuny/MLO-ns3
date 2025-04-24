@@ -48,7 +48,8 @@ RecipientBlockAckAgreement::RecipientBlockAckAgreement(Mac48Address originator,
     m_timeout = timeout;
     m_startingSeq = startingSeq;
     m_htSupported = htSupported;
-    std::cout << "CreateRecipientBlockAckAgreement: " << std::to_string(m_startingSeq) << " originator:" << originator << " m_bufferSize: " << std::to_string(m_bufferSize) << " mode: " << mode << std::endl;
+    m_mode = mode;
+    std::cout << "CreateRecipientBlockAckAgreement: " << std::to_string(m_startingSeq) << " originator:" << originator << " m_bufferSize: " << std::to_string(m_bufferSize) << " mode: " << m_mode << std::endl;
     m_scoreboard.Init(startingSeq, bufferSize);
     m_scoreboard_asyn.resize(2);
     for (auto & board : m_scoreboard_asyn) {

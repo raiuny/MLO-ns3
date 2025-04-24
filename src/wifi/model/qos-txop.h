@@ -483,8 +483,9 @@ class QosTxop : public Txop
     
     uint8_t m_link_up;
     TracedCallback<std::unordered_map<std::string, std::vector<uint32_t>>,
+                   double /*link1Pct*/,
                    std::vector<double> /* throughput */,
-                   std::vector<double> /*success rate*/,
+                   std::vector<double> /* MPDU success rate*/,
                    std::vector<double> /* occupy rate */,
                    std::vector<double> /* avg data rate */,
                    std::vector<double> /* block time rate */,

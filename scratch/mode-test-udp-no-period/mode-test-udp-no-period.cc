@@ -61,6 +61,7 @@ NS_LOG_COMPONENT_DEFINE("mlo-obss-dl-ucp");
 
 struct Stats {
     double throughput;
+    double pct1;
     std::vector<double> thpt;
     std::vector<double> p;
     std::vector<double> occ;
@@ -74,11 +75,11 @@ struct Stats {
     std::unordered_map<std::string, std::vector<uint32_t>> params;
     std::vector<uint32_t> maxAmpduLength;
     std::vector<uint32_t> meanAmpduLength;
-    Stats(double tp, std::vector<double> t, std::vector<double> pr, 
+    Stats(double tp, double pct, std::vector<double> t, std::vector<double> pr, 
         std::vector<double> oc, std::vector<double> dr,  std::vector<double> btr,  std::vector<double> br,
         std::vector<uint32_t> bc,std::vector<uint32_t> bc2, std::vector<uint32_t> tn,
         std::vector<uint64_t> tt, std::unordered_map<std::string, std::vector<uint32_t>> pm, std::vector<uint32_t> maxl, std::vector<uint32_t> meanl)
-    : throughput(tp), thpt(std::move(t)), p(std::move(pr)),
+    : throughput(tp), pct1(pct), thpt(std::move(t)), p(std::move(pr)),
         occ(std::move(oc)), datarate(std::move(dr)), blocktimerate(std::move(btr)), blockrate(std::move(br)),
         blockCnt(std::move(bc)), blockCnt_tr(std::move(bc2)), 
         txopNum(std::move(tn)), txopTime(std::move(tt)), params(std::move(pm)), maxAmpduLength(std::move(maxl)), meanAmpduLength(std::move(meanl))
@@ -123,9 +124,9 @@ GetRxBytes2(bool udp, const ApplicationContainer& serverApp, uint32_t payloadSiz
 }
 
 void
-SaveParams(std::unordered_map<std::string, std::vector<uint32_t>> pm, std::vector<double> thpt, std::vector<double> p, std::vector<double> occ, std::vector<double> datarate, std::vector<double> blocktimerate, std::vector<double> blockrate, std::vector<uint32_t> blockCnt, std::vector<uint32_t> blockCnt_tr, std::vector<uint64_t> txopTime, std::vector<uint32_t> txopNum, std::vector<uint32_t> maxAmpduLength, std::vector<uint32_t> meanAmpduLength)
+SaveParams(std::unordered_map<std::string, std::vector<uint32_t>> pm, double pct1, std::vector<double> thpt, std::vector<double> p, std::vector<double> occ, std::vector<double> datarate, std::vector<double> blocktimerate, std::vector<double> blockrate, std::vector<uint32_t> blockCnt, std::vector<uint32_t> blockCnt_tr, std::vector<uint64_t> txopTime, std::vector<uint32_t> txopNum, std::vector<uint32_t> maxAmpduLength, std::vector<uint32_t> meanAmpduLength)
 {
-    Stats res{0.0, thpt, p, occ, datarate, blocktimerate, blockrate, blockCnt, blockCnt_tr, txopNum, txopTime, pm, maxAmpduLength, meanAmpduLength};
+    Stats res{0.0, pct1, thpt, p, occ, datarate, blocktimerate, blockrate, blockCnt, blockCnt_tr, txopNum, txopTime, pm, maxAmpduLength, meanAmpduLength};
     if (cnt < 2) return;
     results.push_back(res);
     Simulator::Schedule(Seconds(0.1), [&](){
@@ -242,7 +243,7 @@ main(int argc, char* argv[])
 
     uint32_t mcs1 = 6;
     uint32_t mcs2 = 11;
-    uint32_t bw1 = 20;
+    uint32_t bw1 = 40;
     uint32_t bw2 = 160;
     double r1 = 1.0;
     double r2 = 0.0000001;
@@ -318,7 +319,7 @@ main(int argc, char* argv[])
     std::vector<size_t> nStaSlds{inference & 0x01, inference & 0x02};
     uint32_t payloadSize = 700; // must fit in the max TX duration when transmitting at MCS 0 over an RU of 26 tones
     Time accessReqInterval{0};
-    uint32_t maxGroupSize = 1;
+    uint32_t maxGroupSize = 4;
     if (useRts)
     {
         Config::SetDefault("ns3::WifiRemoteStationManager::RtsCtsThreshold", StringValue("0"));
@@ -734,7 +735,7 @@ main(int argc, char* argv[])
 
 
     std::string mldMappingStr = "0,1,2,3,4,5,6,7 0,1";
-    if (singleLink > 0) mldMappingStr = "0,1,2,3,4,5,6,7 "  + std::to_string(singleLink);
+    if (singleLink & 0x03) mldMappingStr = "0,1,2,3,4,5,6,7 "  + std::to_string((singleLink & 0x02) > 0);
     for (auto i = mldDev.Begin(); i != mldDev.End(); ++i)
     {
         auto wifiDev = DynamicCast<WifiNetDevice>(*i);
@@ -818,26 +819,25 @@ main(int argc, char* argv[])
         for (auto& res : results)
         {
             auto params = res.params;
-            fout << params["No"][0] << ", " << (uint32_t)mode << ", " << params["CWmins"][0]
-                << ", " << params["CWmaxs"][0] << ", " << params["CWmins"][1] << ", "
-                << params["CWmaxs"][1] << ", " << params["Aifsns"][0] << ", "
-                << params["Aifsns"][1] << ", " << params["TxopLimits"][0] << ", "
-                << params["TxopLimits"][1] << ", " << params["RTS_CTS"][0] << ", "
-                << params["RTS_CTS"][1] << ", " << params["MaxSlrcs"][0] << ", "
-                << params["MaxSsrcs"][0] << ", " << params["MaxSlrcs"][1] << ", "
-                << params["MaxSsrcs"][1] << ", " << params["RedundancyThresholds"][0] << ", "
-                << params["RedundancyThresholds"][1] << ", "
-                << params["RedundancyFixedNumbers"][0] << ", "
-                << params["RedundancyFixedNumbers"][1] << ", " << res.blockCnt[0] << ", "
-                << res.blockCnt[1] << ", " << res.blockCnt_tr[0] << ", " << res.blockCnt_tr[1]
-                << ", " << res.txopTime[0] << ", " << res.txopTime[1] << ", " << res.txopNum[0]
-                << ", " << res.txopNum[1] << ", " << res.maxAmpduLength[0] << ", "
-                << res.maxAmpduLength[1] << ", " << res.meanAmpduLength[0] << ", "
-                << res.meanAmpduLength[1] << ", " << res.p[0] << ", " << res.p[1] << ", "
-                << res.occ[0] << ", " << res.occ[1] << ", " << res.blocktimerate[0] << ", "
-                << res.blocktimerate[1] << ", " << res.blockrate[0] << ", " << res.blockrate[1]
-                << ", " << res.datarate[0] << ", " << res.datarate[1] << ", " << res.thpt[0]
-                << ", " << res.thpt[1] << ", " << res.throughput << std::endl;
+            fout << params["No"][0] << ", " << (uint32_t)mode << ", " << params["CWmins"][0] << ", "
+                 << params["CWmaxs"][0] << ", " << params["CWmins"][1] << ", "
+                 << params["CWmaxs"][1] << ", " << params["Aifsns"][0] << ", "
+                 << params["Aifsns"][1] << ", " << params["TxopLimits"][0] << ", "
+                 << params["TxopLimits"][1] << ", " << params["RTS_CTS"][0] << ", "
+                 << params["RTS_CTS"][1] << ", " << params["MaxSlrcs"][0] << ", "
+                 << params["MaxSsrcs"][0] << ", " << params["MaxSlrcs"][1] << ", "
+                 << params["MaxSsrcs"][1] << ", " << params["RedundancyThresholds"][0] << ", "
+                 << params["RedundancyThresholds"][1] << ", " << params["RedundancyFixedNumbers"][0]
+                 << ", " << params["RedundancyFixedNumbers"][1] << ", " << res.blockCnt[0] << ", "
+                 << res.blockCnt[1] << ", " << res.blockCnt_tr[0] << ", " << res.blockCnt_tr[1]
+                 << ", " << res.txopTime[0] << ", " << res.txopTime[1] << ", " << res.txopNum[0]
+                 << ", " << res.txopNum[1] << ", " << res.maxAmpduLength[0] << ", "
+                 << res.maxAmpduLength[1] << ", " << res.meanAmpduLength[0] << ", "
+                 << res.meanAmpduLength[1] << ", " << res.p[0] << ", " << res.p[1] << ", "
+                 << res.occ[0] << ", " << res.occ[1] << ", " << res.blocktimerate[0] << ", "
+                 << res.blocktimerate[1] << ", " << res.blockrate[0] << ", " << res.blockrate[1]
+                 << ", " << res.datarate[0] << ", " << res.datarate[1] << ", " << res.thpt[0]
+                 << ", " << res.thpt[1] << ", " << res.pct1 << ", " << res.throughput << std::endl;
         }
         fout.close();
     }

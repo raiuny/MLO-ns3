@@ -356,7 +356,6 @@ HtFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
     if (!peekedItem)
     {
         NS_LOG_DEBUG("No frames available for transmission");
-        // std::cout << "No frames available for transmission on Link " << std::to_string(m_linkId) << std::endl;
         if (edca->GetMsduGrouper())
         {
             edca->GetMsduGrouper()->ResetInflighedCnt();
@@ -402,7 +401,8 @@ HtFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
             (hdr.IsRetry()
                  ? hdr.GetSequenceNumber()
                  : m_txMiddle->GetNextSeqNumberByTidAndAddress(hdr.GetQosTid(), hdr.GetAddr1()));
-        // startingSeq = 0; // zy
+        startingSeq = 0; // zy
+        // if (m_edca->GetMode() & 0x02) startingSeq = 0;
         return SendAddBaRequest(hdr.GetAddr1(),
                                 hdr.GetQosTid(),
                                 startingSeq,
@@ -639,7 +639,6 @@ HtFrameExchangeManager::SendDataFrame(Ptr<WifiMpdu> peekedItem,
 
     std::vector<Ptr<WifiMpdu>> mpduList =
         m_mpduAggregator->GetNextAmpdu(mpdu, txParams, availableTime);
-    // std::cout << "发送： " << mpdu->GetHeader().GetSequenceNumber() << " " << mpduList.size() << std::endl;
     NS_ASSERT(txParams.m_acknowledgment);
     if (m_mac->GetNLinks() > 1 && edca->GetMsduGrouper()) {
        bool flag = edca->GetMsduGrouper()->UpdateAmpduSize(m_linkId, mpduList.size());
@@ -649,11 +648,12 @@ HtFrameExchangeManager::SendDataFrame(Ptr<WifiMpdu> peekedItem,
        }
     }
     
-    // std::cout << Simulator::Now() << " SendDataFrame on Link " << (uint32_t)m_linkId << std::endl << "[";
-    // for (const auto & it : mpduList) {
-    //     std::cout << it->GetHeader().GetSequenceNumber() << ", ";
-    // }
-    // std::cout << "], 长度 = " << mpduList.size() << std::endl;
+    std::cout << Simulator::Now() << " SendDataFrame on Link " << (uint32_t)m_linkId << std::endl << "[";
+    for (const auto & it : mpduList) {
+        std::cout << it->GetHeader().GetSequenceNumber() << ", ";
+    }
+    std::cout << "], 长度 = " << mpduList.size() << std::endl;
+
     if (mpduList.size() > 1)
     {
         // A-MPDU aggregation succeeded

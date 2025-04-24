@@ -283,6 +283,16 @@ public:
     bool UpdateAmpduSize(uint8_t linkId, uint32_t size);
 
     void SetTxopTimeEnd(uint64_t time /* ns */, uint8_t linkId);
+
+    void ResetEnqueueNum();
+
+    void SetLink1Pct(double link1Pct);
+
+    double GetLink1Pct();
+
+    uint32_t GetMaxGroupSize();
+
+    Time GetStartTime();
     /**
      * 
      * cwmin, cwmax, txoplimits, aifsns, rts_cts, ampdusize

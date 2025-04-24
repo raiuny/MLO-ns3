@@ -451,6 +451,10 @@ class Txop : public Object
     void SetMaxGroupSize(uint32_t maxGroupSize);
 
     /**
+     * Get mode
+     */
+    uint32_t GetMode() const; 
+    /**
      * @brief Get the maximum group size.
      * @return The maximum number of MSDUs allowed in each group.
      */
@@ -581,6 +585,7 @@ class Txop : public Object
     CwValueTracedCallback m_cwTrace;           //!< CW trace value
     
     uint32_t m_mode;
+    double m_link1Pct;
     bool m_gs_enable;
     bool m_param_update;
     

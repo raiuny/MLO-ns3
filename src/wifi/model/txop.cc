@@ -160,6 +160,13 @@ Txop::GetTypeId()
                 MakeUintegerAccessor(&Txop::SetMaxGroupSize, &Txop::GetMaxGroupSize),
                 MakeUintegerChecker<uint32_t>()
                 )
+            .AddAttribute(
+                "Link1Pct",
+                "The ratio of packets allocated to link1 (must be between 0.0 and 1.0)",
+                DoubleValue(0),
+                MakeDoubleAccessor(&Txop::m_link1Pct),
+                MakeDoubleChecker<double>(0.0, 1.0) 
+            )
             .AddAttribute("Mode",
                 "Mode Setting",
                 UintegerValue(0),
@@ -774,6 +781,7 @@ Txop::DoInitialize()
     // The initialization of m_queue and m_mac has been completed.
     if (m_mode & 0x03) {
         m_grouper = Create<MsduGrouper>(m_maxGroupSize, 4096, m_queue, m_mac, m_mode, m_period);
+        m_grouper->SetLink1Pct(m_link1Pct);
         if (m_gs_enable) m_grouper->EnableGridSearch(m_jsonFileName);
         if (m_param_update) m_grouper->EnableParamUpdate();
     }
@@ -877,6 +885,11 @@ void Txop::SetMaxGroupSize(uint32_t maxGroupSize)
 uint32_t Txop::GetMaxGroupSize() const
 {
     return m_maxGroupSize;
+}
+
+uint32_t Txop::GetMode() const
+{
+    return m_mode;
 }
 
 } // namespace ns3

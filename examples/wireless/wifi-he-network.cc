@@ -65,7 +65,7 @@ main(int argc, char* argv[])
     bool useExtendedBlockAck{false};
     Time simulationTime{"10s"};
     meter_u distance{1.0};
-    double frequency{5}; // whether 2.4, 5 or 6 GHz
+    double frequency{2.4}; // whether 2.4, 5 or 6 GHz
     std::size_t nStations{1};
     std::string dlAckSeqType{"NO-OFDMA"};
     bool enableUlOfdma{false};

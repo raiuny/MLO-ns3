@@ -192,7 +192,7 @@ QosTxop::DoInitialize()
             MakeCallback(&MsduGrouper::NotifyDiscardedMpdu, GetMsduGrouper()));
 
         if(m_ac == AC_BE) {
-            Simulator::Schedule(Seconds(3.0), &QosTxop::ScheduleUpdateEdcaParameters, this, GetMsduGrouper()->GetPeriod()); 
+            Simulator::Schedule(Seconds(3), &QosTxop::ScheduleUpdateEdcaParameters, this, GetMsduGrouper()->GetPeriod()); 
         }
     }
 }
@@ -337,7 +337,7 @@ QosTxop::GetBaStartingSequence(Mac48Address address, uint8_t tid) const
 uint16_t
 QosTxop::GetBaStartingSequence(Mac48Address address, uint8_t tid, uint8_t linkId) const
 {
-    if (m_mode) return m_baManager->GetOriginatorRptr(address, tid, linkId);
+    if (m_mode & 0x03) return m_baManager->GetOriginatorRptr(address, tid, linkId);
     return m_baManager->GetOriginatorStartingSequence(address, tid);
 }
 
@@ -795,7 +795,9 @@ QosTxop::NotifyChannelReleased(uint8_t linkId)
 
     if (m_mode & 0x03) {
         GetMsduGrouper()->SetTxopTimeEnd(Simulator::Now().GetMicroSeconds(), linkId);
-        if(GetMsduGrouper()->IsParamUpdateEnabled()) SetTxopLimit(MicroSeconds(m_alg_txop_limits[linkId]) * 32, linkId);
+        if(GetMsduGrouper()->IsParamUpdateEnabled()) {
+            SetTxopLimit(MicroSeconds(m_alg_txop_limits[linkId]) * 32, linkId);
+        }
     }
 
 }

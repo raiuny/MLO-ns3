@@ -979,6 +979,7 @@ FrameExchangeManager::NormalAckTimeout(Ptr<WifiMpdu> mpdu, const WifiTxVector& t
         NotifyPacketDiscarded(mpdu);
         // Dequeue the MPDU if it is stored in a queue
         DequeueMpdu(mpdu);
+        std::cout << "Missed Ack, discard MPDU " << mpdu->GetHeader().GetSequenceNumber() << std::endl;
         GetWifiRemoteStationManager()->ReportFinalDataFailed(mpdu);
         m_dcf->ResetCw(m_linkId);
     }

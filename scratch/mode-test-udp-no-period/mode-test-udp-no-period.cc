@@ -195,7 +195,7 @@ NotifyPpduTxDurationOBSS(Ptr<const WifiPpdu> ppdu, Time duration, uint8_t linkid
     if (psdu->IsAggregate())
     {
         uint32_t nmpdus = psdu->GetNMpdus();
-        if (Simulator::Now().GetSeconds() < 1.5)
+        if (Simulator::Now().GetSeconds() < 6)
         {
             std::fstream file;
             file.open(ppduTxOutputFile, std::ios::out | std::ios::app);
@@ -217,7 +217,7 @@ Ptr<const WifiPsdu> psdu = ppdu->GetPsdu();
 if (psdu->IsAggregate())
 {
     uint32_t nmpdus = psdu->GetNMpdus();
-    if (Simulator::Now().GetSeconds() < 1.5)
+    if (Simulator::Now().GetSeconds() < 6)
     {
         std::fstream file;
         file.open(ppduTxOutputFile, std::ios::out | std::ios::app);
@@ -243,9 +243,9 @@ main(int argc, char* argv[])
 
     uint32_t mcs1 = 6;
     uint32_t mcs2 = 11;
-    uint32_t bw1 = 40;
+    uint32_t bw1 = 20;
     uint32_t bw2 = 160;
-    double r1 = 1.0;
+    double r1 = 0.8;
     double r2 = 0.0000001;
     uint32_t ch1 = 0;
     uint32_t ch2 = 0;
@@ -259,13 +259,13 @@ main(int argc, char* argv[])
 
     uint32_t txoplimit1 = 0, txoplimit2 = 0;
     uint32_t singleLink = 0;
-    uint32_t inference = 0x00;
+    uint32_t inference = 0x01;
     uint32_t period1 = 3;
     bool grid_search_enable = true;
     uint32_t nss = 1;
     uint8_t mode = 1;
 
-    uint32_t simT = period1 * 1 + 1;
+    uint32_t simT = period1 * 20 + 1;
     CommandLine cmd(__FILE__);
     std::filesystem::path filepath = __FILE__;
     cmd.AddValue("seed", "seed number", seedNumber);
@@ -334,8 +334,8 @@ main(int argc, char* argv[])
     //      QueueSizeValue(QueueSize(QueueSizeUnit::PACKETS, 1024)));
 
     // Disable fragmentation
-    Config::SetDefault("ns3::WifiRemoteStationManager::FragmentationThreshold",   
-        UintegerValue(std::numeric_limits<uint32_t>::max()));
+    // Config::SetDefault("ns3::WifiRemoteStationManager::FragmentationThreshold",   
+    //     UintegerValue(std::numeric_limits<uint32_t>::max()));
 
     // Make retransmissions persistent
     //  Config::SetDefault("ns3::WifiRemoteStationManager::MaxSlrc",
@@ -375,7 +375,7 @@ main(int argc, char* argv[])
             if (i == 0) {
             dataModeStr = "EhtMcs" + std::to_string(mcs[i]);
             nonHtRefRateMbps = EhtPhy::GetNonHtReferenceRate(mcs[i]) / 1e6;
-            ctrlRateStr = "ErpOfdmRate" + std::to_string(nonHtRefRateMbps) + "Mbps";
+            ctrlRateStr = "OfdmRate" + std::to_string(nonHtRefRateMbps) + "Mbps";
             std::cout << "Link " << std::to_string(i) <<" ControlRate: " << ctrlRateStr << " DataMode: " << dataModeStr << std::endl;
             wifi.SetRemoteStationManager(i, 
                                             "ns3::ConstantRateWifiManager",
@@ -383,7 +383,7 @@ main(int argc, char* argv[])
                                             "ControlMode", StringValue(ctrlRateStr));
             dataModeStr = "HeMcs" + std::to_string(mcs[i]);
             nonHtRefRateMbps = HePhy::GetNonHtReferenceRate(mcs[i]) / 1e6;
-            ctrlRateStr = "ErpOfdmRate" + std::to_string(nonHtRefRateMbps) + "Mbps";
+            ctrlRateStr = "OfdmRate" + std::to_string(nonHtRefRateMbps) + "Mbps";
             std::cout << "2.4G OBSS: ControlRate: " << ctrlRateStr << " DataMode: " << dataModeStr << std::endl;
             wifi2.SetRemoteStationManager("ns3::ConstantRateWifiManager",
                                                 "DataMode", StringValue(dataModeStr),
@@ -748,6 +748,8 @@ main(int argc, char* argv[])
     apWifiDev->GetMac()->GetEhtConfiguration()->SetAttribute("TidToLinkMappingDl", StringValue(mldMappingStr));
     apWifiDev->GetMac()->GetEhtConfiguration()->SetAttribute("TidToLinkMappingUl",StringValue(mldMappingStr));
 
+
+    Config::Set("/NodeList/0/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/UseExplicitBarAfterMissedBlockAck", BooleanValue(false)); // 开启隐式BAR
     Config::Set("/NodeList/0/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MaxGroupSize", UintegerValue(maxGroupSize));
     Config::Set("/NodeList/0/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/Period", TimeValue(period));
     Config::Set("/NodeList/0/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/Mode", UintegerValue(mode));
@@ -783,8 +785,12 @@ main(int argc, char* argv[])
     // Config::Set("/NodeList/2/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MaxCws", AttributeContainerValue<UintegerValue>(std::list<int>{1023}));
 
     std::cout << "TxopLimits : (" << txoplimit1 << "," << txoplimit2  << ")" << std::endl;
-    std::list<Time> txopLimitList = {MicroSeconds(txoplimit1) * 32, MicroSeconds(txoplimit2) * 32};
+    std::vector<Time> txopLimitList = {MicroSeconds(32) * txoplimit1, MicroSeconds(32) * txoplimit2};
+    std::cout << txopLimitList[0] << " " << txopLimitList[1] << std::endl;
     Config::Set("/NodeList/0/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/TxopLimits", AttributeContainerValue<TimeValue>(txopLimitList));
+    // Config::Set("/NodeList/0/DeviceList/*/$ns3::WifiNetDevice/Mac/Txop/TxopLimits", AttributeContainerValue<TimeValue>(txopLimitList));
+    // Config::Set("/NodeList/0/DeviceList/0/$ns3::WifiNetDevice/Mac/VO_Txop/TxopLimits", AttributeContainerValue<TimeValue>(txopLimitList));
+    // Config::Set("/NodeList/0/DeviceList/0/$ns3::WifiNetDevice/Mac/VI_Txop/TxopLimits", AttributeContainerValue<TimeValue>(txopLimitList));
 
     //  phy.EnablePcap("ap0-trace", apDev.Get(0));
     // phySld2.EnablePcap("ap1-trace", apDev.Get(1));

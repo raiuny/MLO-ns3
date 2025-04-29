@@ -257,7 +257,7 @@ main(int argc, char* argv[])
 {
     uint32_t mcs1 = 6;
     uint32_t mcs2 = 11;
-    uint32_t bw1 = 20;
+    uint32_t bw1 = 40;
     uint32_t bw2 = 160;
     double r1 = 1;
     double r2 = 1;
@@ -274,8 +274,8 @@ main(int argc, char* argv[])
     uint8_t mode = 1;
     uint32_t nss = 1;
     uint32_t simT = 1;
-    double txoplimit1 = 0.0;
-    double txoplimit2 = 0.0;
+    double txoplimit1 = 42;
+    double txoplimit2 = 42;
     uint32_t use5Gonly = 0;
     uint8_t enable_interference = 1;//0 disable, 1 enable 2.4G interference, 2 enable 5G interference
     std::string jsonfile("./scratch/params.json");

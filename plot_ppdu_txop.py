@@ -2,7 +2,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # 读取数据
-df = pd.read_csv('PPDU.csv')
+# df = pd.read_csv('PPDU_no_interference_no_newarch_txoplimits_0.000000_0.000000_link1Pct_0.004000.csv')
+df = pd.read_csv("PPDU.csv")
 # df['type'] = df['type'].astype(str)
 
 color_map = {
@@ -14,19 +15,22 @@ color_map = {
 def get_y(type_):
     if type_ == '1':
         return 1
+    elif type_ == '0':
+        return 0
     else:
         return 0
+        
 
-fig, ax = plt.subplots(figsize=(16, 4))
+fig, ax = plt.subplots(figsize=(20, 4))
 
-begin = 1100000
-end = 1120000
+begin = 1220000
+end = 1350000
 for idx, row in df.iterrows():
     x_start = row.iloc[1]
     x_end = row.iloc[2]
     if x_start > begin and x_start < end:
         width = x_end - x_start
-        y = int(row.iloc[0])
+        y = get_y(row.iloc[0])
         color = color_map.get(str(row.iloc[0]), 'gray')
         rect = plt.Rectangle((x_start, y-0.4), width, 0.8, color=color, alpha=0.7, edgecolor='black')
         ax.add_patch(rect)
@@ -64,7 +68,7 @@ legend_elements = [
     Patch(facecolor='purple', edgecolor='black', label='link0 txop'),
     Patch(facecolor='red', edgecolor='black', label='link1 txop'),
 ]
-ax.legend(handles=legend_elements, loc='upper right')
+ax.legend(handles=legend_elements)
 
 ax.set_ylim(-0.7, 1.7)
 ax.autoscale(enable=True, axis='x', tight=True)

@@ -374,19 +374,24 @@ HtFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
         {
             GetBaManager(tid)->UpdateLinkRPtrSyncEnabled(linkId, m_mac->GetLinkTxStatus()[linkId]);
         }
-        // std::cout << "读指针更新前： " << std::endl;
-        // std::vector<uint16_t> rptrs = GetBaManager(tid)->GetRptr(peekedItem->GetHeader().GetAddr1(), tid);
-        // for (auto i : rptrs) {
-        //     std::cout << (uint32_t)i  << " " ;
-        // }
-        // std::cout << std::endl << "读指针更新后：\n" ;
+        bool flag = Simulator::Now() > Seconds(1.3);
+        if (flag) {
+        std::cout << "读指针更新前： " << std::endl;
+        std::vector<uint16_t> rptrs = GetBaManager(tid)->GetRptr(peekedItem->GetHeader().GetAddr1(), tid);
+        for (auto i : rptrs) {
+            std::cout << (uint32_t)i  << " " ;
+        }
+        std::cout << std::endl << "读指针更新后：\n" ;
+        }
         GetBaManager(tid)->UpdateRptr(peekedItem->GetHeader().GetAddr1(), tid, m_linkId); // 更新自己的读指针 max(2G, 5G)
 
-        // rptrs = GetBaManager(tid)->GetRptr(peekedItem->GetHeader().GetAddr1(), tid);
-        // for (auto i : rptrs) {
-        //     std::cout << (uint32_t)i  << " " ;
-        // }
-        // std::cout << std::endl;
+        if (flag) {
+            auto rptrs = GetBaManager(tid)->GetRptr(peekedItem->GetHeader().GetAddr1(), tid);
+            for (auto i : rptrs) {
+                std::cout << (uint32_t)i  << " " ;
+            }
+            std::cout << std::endl;
+        }
     }
 
     const WifiMacHeader& hdr = peekedItem->GetHeader();
@@ -401,8 +406,6 @@ HtFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
             (hdr.IsRetry()
                  ? hdr.GetSequenceNumber()
                  : m_txMiddle->GetNextSeqNumberByTidAndAddress(hdr.GetQosTid(), hdr.GetAddr1()));
-        startingSeq = 0; // zy
-        // if (m_edca->GetMode() & 0x02) startingSeq = 0;
         return SendAddBaRequest(hdr.GetAddr1(),
                                 hdr.GetQosTid(),
                                 startingSeq,
@@ -631,12 +634,11 @@ HtFrameExchangeManager::SendDataFrame(Ptr<WifiMpdu> peekedItem,
         NS_LOG_DEBUG("Not enough time to transmit a frame");
         return false;
     }
-
     // try A-MPDU aggregation
     if (edca->GetMsduGrouper()) {
         edca->GetMsduGrouper()->ResetInflighedCnt();
     }
-
+    
     std::vector<Ptr<WifiMpdu>> mpduList =
         m_mpduAggregator->GetNextAmpdu(mpdu, txParams, availableTime);
     NS_ASSERT(txParams.m_acknowledgment);
@@ -647,13 +649,14 @@ HtFrameExchangeManager::SendDataFrame(Ptr<WifiMpdu> peekedItem,
            edca->GetMsduGrouper()->ResetRedundancyMode(m_linkId);
        }
     }
-    
-    std::cout << Simulator::Now() << " SendDataFrame on Link " << (uint32_t)m_linkId << std::endl << "[";
-    for (const auto & it : mpduList) {
-        std::cout << it->GetHeader().GetSequenceNumber() << ", ";
+    if (Simulator::Now()> Seconds(1.3)) {
+        std::cout << Simulator::Now() << " SendDataFrame on Link " << (uint32_t)m_linkId << std::endl << "[";
+        for (const auto & it : mpduList) {
+            std::cout << it->GetHeader().GetSequenceNumber() << ", ";
+        }
+        std::cout << "], 长度 = " << mpduList.size() << std::endl;
     }
-    std::cout << "], 长度 = " << mpduList.size() << std::endl;
-
+    
     if (mpduList.size() > 1)
     {
         // A-MPDU aggregation succeeded

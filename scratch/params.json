@@ -2,7 +2,7 @@
     "CWmin": [15,15],
     "Aifsn": [2,2],
     "RTS/CTS": [0,0],
-    "TxopLimits": [256, 64],
+    "TxopLimits": [124, 124],
     "AmpduSize": [0,0],
     "MaxSlrc": [4,4],
     "MaxSsrc": [7,7],

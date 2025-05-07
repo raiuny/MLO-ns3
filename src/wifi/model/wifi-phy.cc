@@ -1822,7 +1822,7 @@ WifiPhy::Send(Ptr<const WifiPsdu> psdu, const WifiTxVector& txVector, uint8_t li
     Time transmissionDelay = CalculateTransmissionDelay(txVector.IsAggregation(), MpduCnt, MsduCnt);
     // std::cout << "MpduCnt = " << MpduCnt << ", MsduCnt = " << MsduCnt << ", transmissionDelay = " << transmissionDelay.As(Time::US) << std::endl;
     if (transmissionDelay != MicroSeconds(0)) {
-        transmissionDelay = MicroSeconds(9);
+        // transmissionDelay = MicroSeconds(9);
         Simulator::Schedule(transmissionDelay, &WifiPhy::DoSend, this, GetWifiConstPsduMap(psdu, txVector), std::ref(txVector), linkId, std::ref(linkStatus));
     } else 
         DoSend(GetWifiConstPsduMap(psdu, txVector), txVector, linkId, linkStatus);

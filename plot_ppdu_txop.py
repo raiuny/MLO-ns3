@@ -24,8 +24,8 @@ def get_y(type_):
 
 fig, ax = plt.subplots(figsize=(20, 4))
 
-begin = 1682895
-end = 2082895
+begin = 1500000
+end = 1600000
 for idx, row in df.iterrows():
     linkId = str(row.iloc[0])
     x_start = row.iloc[1]

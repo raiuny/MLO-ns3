@@ -24,7 +24,7 @@ OriginatorBlockAckAgreement::OriginatorBlockAckAgreement(Mac48Address recipient,
       m_linkRPtr({0, 0}),
       m_state(PENDING)
 {
-    std::cout << "CreateOriginatorBlockAckAgreement: recipient: " << recipient << " tid: " << (uint32_t)tid << " " <<  m_linkRPtr.size() << std::endl;
+    std::cout << "CreateOriginatorBlockAckAgreement: recipient: " << recipient << " tid: " << (uint32_t)tid << std::endl;
 }
 
 OriginatorBlockAckAgreement::~OriginatorBlockAckAgreement()
@@ -130,7 +130,7 @@ OriginatorBlockAckAgreement::NotifyTransmittedMpdu(Ptr<const WifiMpdu> mpdu)
 {
     uint16_t mpduSeqNumber = mpdu->GetHeader().GetSequenceNumber();
     uint16_t distance = GetDistance(mpduSeqNumber);
-    // std::cout << "SEQNO_SPACE_HALF_SIZE: " << SEQNO_SPACE_HALF_SIZE << std::endl;
+
     if (distance >= SEQNO_SPACE_HALF_SIZE)
     {
         NS_LOG_DEBUG("Transmitted an old MPDU, do nothing.");

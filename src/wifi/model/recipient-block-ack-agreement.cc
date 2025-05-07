@@ -176,7 +176,7 @@ RecipientBlockAckAgreement::NotifyReceivedMpdu(Ptr<const WifiMpdu> mpdu, uint8_t
     } else {
         uint16_t mpduSeqNumber = mpdu->GetHeader().GetSequenceNumber();
         uint16_t distance = GetDistance(mpduSeqNumber, m_scoreboard_asyn[linkId].GetWinStart());
-        if (Simulator::Now() > Seconds(1.3)) std::cout << Simulator::Now() << " Got snn = " << mpduSeqNumber << " on " << +linkId << "distance = " << distance  <<" winStart = " << m_scoreboard_asyn[linkId].GetWinStart()<< std::endl;
+        // if (Simulator::Now() > Seconds(1.34)) std::cout << Simulator::Now() << " Got snn = " << mpduSeqNumber << " on " << +linkId << "distance = " << distance  <<" winStart = " << m_scoreboard_asyn[linkId].GetWinStart()<< std::endl;
         /* Update the scoreboard (see Section 10.24.7.3 of 802.11-2016) */
         if (distance < m_scoreboard_asyn[linkId].GetWinSize())
         {
@@ -188,6 +188,10 @@ RecipientBlockAckAgreement::NotifyReceivedMpdu(Ptr<const WifiMpdu> mpdu, uint8_t
             m_scoreboard_asyn[linkId].Advance(distance - m_scoreboard_asyn[linkId].GetWinSize() + 1);
             m_scoreboard_asyn[linkId].At(m_scoreboard_asyn[linkId].GetWinSize() - 1) = true;
         }
+        // else {
+        //     m_scoreboard_asyn[linkId].Advance(distance - m_scoreboard_asyn[linkId].GetWinSize() + 1);
+        //     m_scoreboard_asyn[linkId].At(m_scoreboard_asyn[linkId].GetWinSize() - 1) = true;
+        // }
 
         distance = GetDistance(mpduSeqNumber, m_winStartB);
         /* Update the receive reordering buffer (see Section 10.24.7.6.2 of 802.11-2016) */

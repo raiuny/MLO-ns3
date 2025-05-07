@@ -471,10 +471,11 @@ BlockAckManager::NotifyGotBlockAck(uint8_t linkId,
     NS_ASSERT(blockAck.IsCompressed() || blockAck.IsExtendedCompressed() || blockAck.IsMultiSta());
     Time now = Simulator::Now();
     std::list<Ptr<const WifiMpdu>> acked;
-    if (Simulator::Now() > Seconds(1.3)) {
-        std::cout << "Got Block Ack on Link " << (uint32_t)linkId << std::endl;
-        blockAck.Print(std::cout);
-    }
+    // if (Simulator::Now() > Seconds(1.34)) {
+    //     std::cout << "Got Block Ack on Link " << (uint32_t)linkId << " " << recipient << std::endl;
+    //     blockAck.Print(std::cout);
+    //     std::cout << "队列 " << (it->second.second.begin() == it->second.second.end()) << std::endl;
+    // }
     for (auto queueIt = it->second.second.begin(); queueIt != it->second.second.end();)
     {
         uint16_t currentSeq = (*queueIt)->GetHeader().GetSequenceNumber();
@@ -506,10 +507,13 @@ BlockAckManager::NotifyGotBlockAck(uint8_t linkId,
             ++queueIt;
         }
     }
-
-    // 同步linkId链路的信息到其他链路
-    if(nSuccessfulMpdus)
+    // std::cout << nSuccessfulMpdus << " MPDUs acknowledged" << std::endl;
+    // 同步linkId链路的信息到其他链路 , 无论是否传输成功，均要将自己的读指针和全局读指针进行同步
+    if (m_mode) {
+        NS_ASSERT(m_linkRPtrSyncEnabled[linkId]);
+        it->second.first.m_linkRPtr[linkId] = it->second.first.m_txWindow.GetWinStart();
         SyncRptr(recipient, tid, linkId);
+    }
     // Dequeue all acknowledged MPDUs at once
     m_queue->DequeueIfQueued(acked);
 
@@ -555,13 +559,23 @@ BlockAckManager::NotifyMissedBlockAck(uint8_t linkId, const Mac48Address& recipi
     {
         // MPDUs that were transmitted on another link shall stay inflight
         auto linkIds = (*mpduIt)->GetInFlightLinkIds();
+        // std::cout << Simulator::Now() << " Missed Block Ack on Link " << (uint32_t)linkId << " " << linkIds.contains(0) << linkIds.contains(1) << std::endl;
         if (!linkIds.contains(linkId))
         {
             mpduIt = HandleInFlightMpdu(linkId, mpduIt, STAY_INFLIGHT, it, now);
             continue;
         }
-        mpduIt = HandleInFlightMpdu(linkId, mpduIt, TO_RETRANSMIT, it, now);
+        else if (linkIds.size() == 1) // 当且仅当只包含自己链路时才会将其置为待重传状态
+        {
+            mpduIt = HandleInFlightMpdu(linkId, mpduIt, TO_RETRANSMIT, it, now);
+            continue;
+        }
+        // 冗余传输时
+        (*mpduIt)->GetHeader().SetRetry();
+        (*mpduIt)->ResetInFlight(linkId);
+        mpduIt = HandleInFlightMpdu(linkId, mpduIt, STAY_INFLIGHT, it, now);
     }
+    // std::cout << "检验： " << it->second.second.size() << std::endl;
 }
 
 void
@@ -939,9 +953,9 @@ BlockAckManager::SyncRptr(const Mac48Address& recipient, uint8_t tid, uint8_t li
         for (size_t i = 0; i < it->second.first.m_linkRPtr.size(); i++) {
             auto d = it->second.first.GetDistance(it->second.first.m_linkRPtr[i]);
             if (i!= linkId && m_linkRPtrSyncEnabled[i] && d > distance) {
-                if (Simulator::Now() > Seconds(1.3)) {
-                    std::cout << "同步读指针: recipient: " << recipient << " tid: " << (uint32_t) tid << std::endl;
-                    std::cout << "Update: (Link " << uint32_t(i) << ") " << "From " << it->second.first.m_linkRPtr[i] << " to " << it->second.first.m_linkRPtr[linkId] << std::endl;
+                if (Simulator::Now() > Seconds(1.34)) {
+                    // std::cout << "同步读指针: recipient: " << recipient << " tid: " << (uint32_t) tid << std::endl;
+                    // std::cout << "Update: (Link " << uint32_t(i) << ") " << "From " << it->second.first.m_linkRPtr[i] << " to " << it->second.first.m_linkRPtr[linkId] << std::endl;
                 }
                 it->second.first.m_linkRPtr[i] = it->second.first.m_linkRPtr[linkId];
             }

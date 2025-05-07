@@ -16,12 +16,8 @@ QueueStats::QueueStats(Time period, Ptr<WifiMac> mac)
 {
     cycle_time = period;
     m_initialized = false;
-    m_blockCnt = {0, 0};
-    m_blockCnt_prev = {0, 0};
-    m_blockCnt_tr = {0, 0};
-    m_blockCnt_tr_prev = {0, 0};
-    blockwindows = {Seconds(0), Seconds(0)};
-    blockwindows_Total = {Seconds(0), Seconds(0)};
+    blockwindow_begin = {Seconds(0), Seconds(0)};
+    blockwindow_Total = {Seconds(0), Seconds(0)};
     m_mac = mac;
 }
 
@@ -29,8 +25,8 @@ QueueStats::QueueStats()
 {
     cycle_time = Seconds(0.1);
     m_initialized = false;
-    blockwindows = {Seconds(0), Seconds(0)};
-    blockwindows_Total = {Seconds(0), Seconds(0)};
+    blockwindow_begin = {Seconds(0), Seconds(0)};
+    blockwindow_Total = {Seconds(0), Seconds(0)};
 }
 
 QueueStats::~QueueStats()
@@ -47,85 +43,39 @@ QueueStats::Initialize()
 }
 
 double
-QueueStats::GetThroughput()
+QueueStats::GetThroughput(uint8_t linkId, Time period)
 {
+    period = Seconds(0.1);
     double throughput = 0;
     for (const auto& it : m_mpduinfos)
     {
         if (it.m_rxstate &&
-            (!cycle_time.IsStrictlyPositive() || Simulator::Now() - it.m_txTime < cycle_time))
-        {
-            throughput += it.m_size;
-        }
-    }
-    if (!cycle_time.IsStrictlyPositive())
-        return throughput / Simulator::Now().GetSeconds();
-    return throughput / cycle_time.GetSeconds();
-}
-
-double
-QueueStats::GetThroughput(uint8_t linkId)
-{
-    double throughput = 0;
-    for (const auto& it : m_mpduinfos)
-    {
-        if (it.m_rxstate &&
-            (!cycle_time.IsStrictlyPositive() || Simulator::Now() - it.m_txTime < cycle_time) &&
+            (!period.IsStrictlyPositive() || Simulator::Now() - it.m_txTime < period) &&
             (it.m_linkIds & (1 << linkId)))
         {
             throughput += it.m_size;
         }
     }
-    if (!cycle_time.IsStrictlyPositive())
-        return throughput / Simulator::Now().GetSeconds();
-    return throughput * 8 / cycle_time.GetMicroSeconds();
+    if (period.IsStrictlyPositive())
+        return throughput * 8 / period.GetMicroSeconds();
+    return throughput * 8 / (Simulator::Now().GetMicroSeconds() - 1e6);
 }
 
 double
-QueueStats::GetChannelEfficiency()
-{
-    Time totalduration = Seconds(0);
-    if (cycle_time.IsStrictlyPositive())
-    {
-        for (auto it = m_ppduinfos.rbegin(); it != m_ppduinfos.rend(); it++)
-        {
-            if (Simulator::Now() - it->m_mpduinfos[0].m_txTime < cycle_time)
-            {
-                totalduration += it->txDuration;
-            }
-            else
-            {
-                break;
-            }
-        }
-        return totalduration.GetSeconds() / cycle_time.GetSeconds();
-    }
-    else
-    {
-        for (auto it = m_ppduinfos.rbegin(); it != m_ppduinfos.rend(); it++)
-        {
-            totalduration += it->txDuration;
-        }
-        return totalduration.GetSeconds() / Simulator::Now().GetSeconds();
-    }
-    return 0;
-}
-
-double
-QueueStats::GetChannelEfficiency(uint8_t linkId)
+QueueStats::GetChannelEfficiency(uint8_t linkId, Time period)
 {
     Time totalduration;
-    if (cycle_time.IsStrictlyPositive())
+    if (period.IsStrictlyPositive())
     {
         for (auto it = m_ppduinfos.rbegin(); it != m_ppduinfos.rend(); it++)
         {
-            if (Simulator::Now() - it->m_mpduinfos[0].m_txTime < cycle_time &&
+            if (Simulator::Now() - it->m_mpduinfos[0].m_txTime < period &&
                 (it->m_mpduinfos[0].m_linkIds & (1 << linkId)))
             {
                 totalduration += it->txDuration;
             }
         }
-        return totalduration.GetSeconds() / cycle_time.GetSeconds();
+        return totalduration.GetSeconds() / period.GetSeconds();
     }
     else
     {
@@ -136,36 +86,19 @@ QueueStats::GetChannelEfficiency(uint8_t linkId)
                 totalduration += it->txDuration;
             }
         }
-        return totalduration.GetSeconds() / Simulator::Now().GetSeconds();
+        return totalduration.GetSeconds() / (Simulator::Now().GetSeconds() - 1);
     }
     return 0;
 }
 
 double
-QueueStats::GetMpduSuccessRate()
-{
-    double success = 0;
-    double total = 0;
-    for (const auto& it : m_mpduinfos)
-    {
-        if ((!cycle_time.IsStrictlyPositive() || Simulator::Now() - it.m_txTime < cycle_time))
-        {
-            if (it.m_rxstate)
-                success++;
-            total++;
-        }
-    }
-    return success / total;
-}
-
-double
-QueueStats::GetMpduSuccessRate(uint8_t linkId)
+QueueStats::GetMpduSuccessRate(uint8_t linkId, Time period)
 {
     double successnum = 0;
     double totalnum = 0;
     for (const auto& it : m_mpduinfos)
     {
-        if ((!cycle_time.IsStrictlyPositive() || Simulator::Now() - it.m_txTime < cycle_time) &&
+        if ((!period.IsStrictlyPositive() || Simulator::Now() - it.m_txTime < period) &&
             (it.m_linkIds & (linkId + 1)))
         {
             if (it.m_rxstate)
@@ -173,19 +106,19 @@ QueueStats::GetMpduSuccessRate(uint8_t linkId)
             totalnum += it.m_txcount;
         }
     }
-    return successnum / totalnum;
+    return successnum / (totalnum == 0 ? 1 : totalnum);
 }
 
-std::vector<double>
-QueueStats::GetRecentAMPDULength(uint8_t linkId)
+std::vector<uint32_t>
+QueueStats::GetRecentAMPDULengths(uint8_t linkId, Time period)
 {
-    std::vector<double> lengths;
-    if (cycle_time.IsStrictlyPositive())
+    std::vector<uint32_t> lengths;
+    if (period.IsStrictlyPositive())
     {
         for (auto it = m_ppduinfos.rbegin(); it != m_ppduinfos.rend(); it++)
         {
             if ((it->m_mpduinfos[0].m_linkIds & (linkId + 1)) &&
-                (Simulator::Now() - it->txTime < cycle_time))
+                (Simulator::Now() - it->txTime < period))
             {
                 lengths.push_back(it->m_mpduinfos.size());
             }
@@ -201,21 +134,21 @@ QueueStats::GetRecentAMPDULength(uint8_t linkId)
             }
         }
     }
-    return lengths;
+    return lengths.size() > 0 ? lengths : std::vector<uint32_t>{0};
 }
 
 double
-QueueStats::GetAverageDataRate(uint8_t linkId)
+QueueStats::GetAverageDataRate(uint8_t linkId, Time period)
 {
     double datarate = 0;
     Time totalduration = Seconds(0);
-    if (cycle_time.IsStrictlyPositive())
+    if (period.IsStrictlyPositive())
     {
         for (auto it = m_ppduinfos.rbegin(); it != m_ppduinfos.rend(); it++)
         {
             if (it->txDuration.IsStrictlyPositive() &&
                 (it->m_mpduinfos[0].m_linkIds & (linkId + 1)) &&
-                (Simulator::Now() - it->txTime < cycle_time))
+                (Simulator::Now() - it->txTime < period))
             {
                 datarate += it->m_mpduinfos[0].DataRate * it->txDuration.GetSeconds();
                 totalduration += it->txDuration;
@@ -237,6 +170,79 @@ QueueStats::GetAverageDataRate(uint8_t linkId)
     return datarate / totalduration.GetMicroSeconds();
 }
 
+std::vector<double>
+QueueStats::GetBlockTimeRate(Time period)
+{
+    std::vector<double> blocktimerate{0, 0};
+    if (period.IsStrictlyPositive())
+    {
+        for (auto linkId = 0; linkId < 2; linkId++)
+        {
+            double blockTime = 0;
+            for (const auto& it : blockwindow_time[linkId])
+            {
+                if (it.first > Simulator::Now() - period)
+                {
+                    blockTime += it.second.GetSeconds();
+                }
+            }
+            blocktimerate[linkId] = blockTime / period.GetSeconds();
+        }
+    }
+    return blocktimerate;
+}
+
+std::vector<uint32_t> 
+QueueStats::GetBlockCnt(Time period) {
+    std::vector<uint32_t> blockCnt{0, 0};
+    if (period.IsStrictlyPositive())
+    {
+        for (auto linkId = 0; linkId < 2; linkId++)
+        {
+            double cnt = 0;
+            for (const auto& it : blockwindow_time[linkId])
+            {
+                if (it.first > Simulator::Now() - period)
+                {
+                    ++cnt;
+                }
+            }
+            blockCnt[linkId] = cnt;
+        }
+    } else {
+        for (auto linkId = 0; linkId < 2; linkId++)
+        {
+            blockCnt[linkId] = blockwindow_time[linkId].size();;
+        }
+    }
+    return blockCnt;
+}
+
+std::vector<uint32_t> 
+QueueStats::GetBlockCnt_other_inflight(Time period = Seconds(0)) {
+    std::vector<uint32_t> blockCnt{0, 0};
+    if (period.IsStrictlyPositive())
+    {
+        for (auto linkId = 0; linkId < 2; linkId++)
+        {
+            double cnt = 0;
+            for (const auto& it : blockwindow_time_other_inflight[linkId])
+            {
+                if (it > Simulator::Now() - period)
+                {
+                    ++cnt;
+                }
+            }
+            blockCnt[linkId] = cnt;
+        }
+    } else {
+        for (auto linkId = 0; linkId < 2; linkId++)
+        {
+            blockCnt[linkId] = blockwindow_time_other_inflight[linkId].size();;
+        }
+    }
+    return blockCnt;
+}
 // 入队
 bool
 QueueStats::Enqueue(Ptr<const WifiMpdu> mpdu)
@@ -514,9 +520,10 @@ MsduGrouper::NotifyPpduTxDuration(Ptr<const WifiPpdu> ppdu, Time duration, uint8
     ppduinfo.txDuration = duration;
     ppduinfo.txTime = Simulator::Now();
     Ptr<const WifiPsdu> psdu = ppdu->GetPsdu();
+    uint32_t nmpdus = 0;
     if (psdu->IsAggregate())
     {
-        uint32_t nmpdus = psdu->GetNMpdus();
+        nmpdus = psdu->GetNMpdus();
         for (uint32_t i = 0; i < nmpdus; i++)
         {
             Ptr<Packet> packet = psdu->GetAmpduSubframe(i);
@@ -538,6 +545,7 @@ MsduGrouper::NotifyPpduTxDuration(Ptr<const WifiPpdu> ppdu, Time duration, uint8
     }
     else
     {
+        nmpdus = 1;
         Ptr<const Packet> packet = psdu->GetPacket();
         auto it =
             std::find_if(m_queueStats.m_mpduinfos.rbegin(),
@@ -554,6 +562,7 @@ MsduGrouper::NotifyPpduTxDuration(Ptr<const WifiPpdu> ppdu, Time duration, uint8
                          << Simulator::Now() << " " << packet->GetUid());
         }
     }
+    m_txopNumList[linkId].emplace_back(Simulator::Now().GetMicroSeconds(), nmpdus);
     m_queueStats.m_ppduinfos.push_back(ppduinfo);
 }
 
@@ -689,6 +698,7 @@ MsduGrouper::SetRedundancyMode(uint8_t linkId, uint32_t re_num)
 {
     m_redundancyMode = m_redundancyMode | (1 << linkId);
     m_maxRedundantPackets[linkId] = re_num;
+    // std::cout << "Redundancy mode opened on Link " << uint32_t(linkId) << " MaxNum: " << re_num << std::endl;
 }
 
 void
@@ -697,6 +707,7 @@ MsduGrouper::ResetRedundancyMode(uint8_t linkId)
     // std::cout << "Redundancy mode closed on Link " << uint32_t(linkId) << std::endl;
     m_redundancyMode = m_redundancyMode & ~(1 << linkId);
     m_RedundantPacketCnt[linkId] = 0;
+    m_maxRedundantPackets[linkId] = 0;
 }
 
 uint32_t
@@ -719,41 +730,27 @@ MsduGrouper::UpdateAmpduSize(uint8_t linkId, uint32_t size)
         // if (size == 0) std::cout << Simulator::Now() << " 卡窗, 无包可传 on Link " << (uint32_t)linkId << std::endl;
         if (size < GetBAWindowThreshold(linkId))
         {       
-            m_blockrateList[linkId].push_back((double)size / m_maxAmpduSize[linkId]);
-            if (!m_queueStats.blockwindows[linkId].IsStrictlyPositive()) {
-                m_queueStats.blockwindows[linkId] = Simulator::Now();
+            m_blockrateList[linkId].emplace_back(Simulator::Now(), (double)size / m_maxAmpduSize[linkId]);
+            if (!m_queueStats.blockwindow_begin[linkId].IsStrictlyPositive()) {
+                m_queueStats.blockwindow_begin[linkId] = Simulator::Now();
                 // std::cout << Simulator::Now() << " 卡窗开始 on Link " << (uint32_t)linkId << std::endl;
-                m_queueStats.m_blockCnt[linkId] += 1;
             }
             if (m_inflighted[1 - linkId])
-                m_queueStats.m_blockCnt_tr[linkId] += 1;
+                m_queueStats.blockwindow_time_other_inflight[linkId].push_back(Simulator::Now());
         }
         else
         {
-            if (m_queueStats.blockwindows[linkId].IsStrictlyPositive())
+            if (m_queueStats.blockwindow_begin[linkId].IsStrictlyPositive())
             {
-                m_queueStats.blockwindows_Total[linkId] +=
-                    Simulator::Now() - m_queueStats.blockwindows[linkId];
+                m_queueStats.blockwindow_Total[linkId] +=
+                    Simulator::Now() - m_queueStats.blockwindow_begin[linkId];
+                m_queueStats.blockwindow_time[linkId].emplace_back(m_queueStats.blockwindow_begin[linkId], Simulator::Now() - m_queueStats.blockwindow_begin[linkId]);
                 // std::cout << Simulator::Now() << " 卡窗结束 on Link " << (uint32_t)linkId << std::endl;
-                m_queueStats.blockwindows[linkId] = Seconds(0);
+                m_queueStats.blockwindow_begin[linkId] = Seconds(0);
             }
         }
     }
 
-    // 冗余模式设置
-    // if (size == 1)
-    //     return false;
-    // if (Simulator::Now().GetSeconds() > m_startTime + 1 && size < GetBAWindowThreshold(linkId) *
-    // m_redundancyThreshold[linkId] / 100)
-    // {
-    //     SetRedundancyMode(linkId,  m_redundancyFixedNumber == 0 ? GetBAWindowThreshold(linkId)*
-    //     m_redundancyThreshold[linkId] / 100 - size : m_redundancyFixedNumber);
-    //     // std::cout << "Redundancy mode open, n = "<< ( m_redundancyFixedNumber == 0 ?
-    //     GetBAWindowThreshold(linkId) * m_redundancyThreshold[linkId] / 100 - size :
-    //     m_redundancyFixedNumber ) << " on Link " << (uint32_t)linkId << std::endl;
-    //     UpdateRedundancyCnt(linkId);
-    //     return true; // 开启冗余模式
-    // }
     return false;
 }
 
@@ -772,7 +769,6 @@ MsduGrouper::GetNextEdcaParameters()
     next_params["MaxSlrcs"] = params.MaxSlrcs;
     next_params["MaxSsrcs"] = params.MaxSsrcs;
     next_params["RedundancyThresholds"] = params.RedundancyThresholds;
-    next_params["RedundancyFixedNumbers"] = params.RedundancyFixedNumbers;
     m_current_params = next_params;
 
     std::cout << "MaxAmpduSize: " << m_maxAmpduSize[0] << " " << m_maxAmpduSize[1] << std::endl;
@@ -866,10 +862,7 @@ void
 MsduGrouper::SetTxopTimeEnd(uint64_t time /* us */, uint8_t linkId)
 {
     m_txopTimeEnd[linkId] = time;
-    m_txopTimeList[linkId].push_back(m_txopTimeEnd[linkId] - m_txopTimeBegin[linkId]);
-    m_txopList[linkId].push_back(std::make_pair(m_txopTimeBegin[linkId], m_txopTimeEnd[linkId]));
-    m_txopNumList[linkId].push_back(linkId);
-
+    m_txopList[linkId].emplace_back(m_txopTimeBegin[linkId], m_txopTimeEnd[linkId]);
     m_txopTimeEnd[linkId] = 0;
 }
 
@@ -886,35 +879,79 @@ MsduGrouper::GetMaxAmpduLength()
     return m_maxAmpduSize;
 }
 
-std::vector<uint32_t>
-MsduGrouper::GetMeanAmpduLength()
+std::vector<double>
+MsduGrouper::GetMeanBlockRate(Time period)
 {
-    uint32_t meanAmpduLength1 =
-        std::accumulate(m_txopNumList[0].begin(), m_txopNumList[0].end(), 0) /
-        (m_txopNumList[0].size() == 0 ? 1 : m_txopNumList[0].size());
-    uint32_t meanAmpduLength2 =
-        std::accumulate(m_txopNumList[1].begin(), m_txopNumList[1].end(), 0) /
-        (m_txopNumList[1].size() == 0 ? 1 : m_txopNumList[1].size());
-    return {meanAmpduLength1, meanAmpduLength2};
+    std::vector<double> meanblockrate{-1, -1};
+    if (period.IsStrictlyPositive())
+    {
+        for (auto linkId = 0; linkId < 2; linkId++)
+        {
+            double blockrate = 0;
+            uint32_t blockcnt = 0;
+            for (const auto& it : m_blockrateList[linkId])
+            {
+                if (it.first > Simulator::Now() - period)
+                {
+                    blockrate += it.second;
+                    blockcnt++;
+                }
+            }
+            meanblockrate[linkId] = blockrate / (blockcnt == 0 ? 1 : blockcnt);
+        }
+    }
+    return meanblockrate;
 }
 
-std::vector<double>
-MsduGrouper::GetMeanBlockRate()
-{
-    double r1 = std::accumulate(m_blockrateList[0].begin(), m_blockrateList[0].end(), 0.0) /
-                (m_blockrateList[0].size() == 0 ? 1 : m_blockrateList[0].size());
-    double r2 = std::accumulate(m_blockrateList[1].begin(), m_blockrateList[1].end(), 0.0) /
-                (m_blockrateList[1].size() == 0 ? 1 : m_blockrateList[1].size());
-    return {r1, r2};
+std::vector<uint64_t> 
+MsduGrouper::GetMeanTxopTime(Time period) {
+    std::vector<uint64_t> meanTxopTime{0, 0};
+    if (period.IsStrictlyPositive())
+    {
+        for (auto linkId = 0; linkId < 2; linkId++)
+        {
+            uint64_t txoptime = 0;
+            uint32_t txopcnt = 0;
+            for (const auto& it : m_txopList[linkId])
+            {
+                if (it.first > Simulator::Now().GetMicroSeconds() - period.GetMicroSeconds())
+                {
+                    txoptime += it.second - it.first;
+                    txopcnt ++;
+                }
+            }
+            meanTxopTime[linkId] = txoptime / (txopcnt == 0 ? 1 : txopcnt);
+        }
+    }
+    return meanTxopTime;
+}
+
+std::vector<uint32_t> 
+MsduGrouper::GetMeanTxopMpduNum(Time period) {
+    std::vector<uint32_t> meanTxopMpduNum{0, 0};
+    if (period.IsStrictlyPositive())
+    {
+        for (auto linkId = 0; linkId < 2; linkId++)
+        {
+            uint32_t txopmpdunum = 0;
+            uint32_t txopcnt = 0;
+            for (const auto& it : m_txopNumList[linkId])
+            {
+                if (it.first > Simulator::Now().GetMicroSeconds() - period.GetMicroSeconds())
+                {
+                    txopmpdunum += it.second;
+                    txopcnt ++;
+                }
+            }
+            meanTxopMpduNum[linkId] = txopmpdunum / (txopcnt == 0 ? 1 : txopcnt);
+        }
+    }
+    return meanTxopMpduNum;
 }
 
 void
 MsduGrouper::ClearStats()
 {
-    m_txopNumList.clear();
-    m_txopList.clear();
-    m_txopTimeList.clear();
-    m_blockrateList.clear();
     m_maxAmpduSize = {0, 0};
     m_startTime = Simulator::Now();
 }

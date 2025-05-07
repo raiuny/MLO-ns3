@@ -60,44 +60,37 @@ public:
     QueueStats();
     ~QueueStats();
     bool Initialize();
-    /**
-     * \return the throughput in mbps
-     */
-    double GetThroughput();
-    double GetThroughput(uint8_t linkId);
-
-    double GetChannelEfficiency();
+    
+    double GetThroughput(uint8_t linkId, Time period);
     /**
      * \brief 这个函数是信道利用率的函数，返回的是信道利用率
      */
-    double GetChannelEfficiency(uint8_t linkId);
-    double GetMpduSuccessRate();
+    double GetChannelEfficiency(uint8_t linkId, Time period);
     /**
      * \brief 获取指定链路的成功率
      * \param linkId 链路ID
      * \return the success rate in percentage
      */
-    double GetMpduSuccessRate(uint8_t linkId);
+    double GetMpduSuccessRate(uint8_t linkId, Time period);
     /**
      * \brief 获取指定链路的速率的加权平均，权是PPDU的实际发送时间，值是发送这个PPDU时用的DATA RATE
      * \return the average data rate in mbps
      */
-    double GetAverageDataRate(uint8_t linkId);
+    double GetAverageDataRate(uint8_t linkId, Time period);
 
-    std::vector<double> GetBlockTimeRateAndClear()
-    {
-        std::vector<double> blockTimeRate;
-        blockTimeRate.push_back(blockwindows_Total[0].GetSeconds()/cycle_time.GetSeconds());
-        blockTimeRate.push_back(blockwindows_Total[1].GetSeconds()/cycle_time.GetSeconds());
-        blockwindows_Total = {Seconds(0), Seconds(0)};
-        return blockTimeRate;
-    }
+    std::vector<double> GetBlockTimeRate(Time period);
+
+    std::vector<uint32_t> GetBlockCnt(Time period);
+
+    std::vector<uint32_t> GetBlockCnt_other_inflight(Time period);
+
+
     /**
      * \brief 获取指定链路的最近发送的PPDU的长度
      * \param linkId 链路ID
      * \return 一个包含了最近发的PPDU的长度的vector
      */
-    std::vector<double> GetRecentAMPDULength(uint8_t linkId);
+    std::vector<uint32_t> GetRecentAMPDULengths(uint8_t linkId, Time period);
     /**
      * \brief 获取BawQueue，这个队列我没有按照固定大小来设置，所以不保证大小一定为4096
      * \return 一个包含了BawQueue的map，key是接收者地址和链路ID，value是一个包含了WiFiBawQueueIt的vector
@@ -115,17 +108,15 @@ public:
      * \return 一个包含了MPDU信息的vector，每个元素是一个MPDUInfo结构体，包含了MPDU的UID，接收者，大小，MSDU数量，发送状态，发送次数，发送链路，发送时间，确认时间，数据速率
      */
     std::vector<MPDUInfo>& GetMPDUInfos() {return m_mpduinfos;}
-    std::vector<uint32_t> m_blockCnt;
-    std::vector<uint32_t> m_blockCnt_prev;
 
-    std::vector<uint32_t> m_blockCnt_tr;
-    std::vector<uint32_t> m_blockCnt_tr_prev;
     Time cycle_time;
     bool m_initialized;
     std::vector<PPDUInfo> m_ppduinfos;
     std::vector<MPDUInfo> m_mpduinfos;
-    std::vector<Time> blockwindows;
-    std::vector<Time> blockwindows_Total;
+    std::vector<Time> blockwindow_begin;
+    std::vector<Time> blockwindow_Total;
+    std::map<uint8_t, std::vector<std::pair<Time, Time>>> blockwindow_time;
+    std::map<uint8_t, std::vector<Time>> blockwindow_time_other_inflight;
     std::map<std::pair<Mac48Address, uint8_t>, std::vector<WiFiBawQueueIt>> m_bawqueue;
     Ptr<WifiMac> m_mac;
 };
@@ -331,9 +322,11 @@ public:
     
     std::vector<uint32_t> GetMaxAmpduLength();
 
-    std::vector<uint32_t> GetMeanAmpduLength();
+    std::vector<double> GetMeanBlockRate(Time period);
 
-    std::vector<double> GetMeanBlockRate();
+    std::vector<uint64_t> GetMeanTxopTime(Time period);
+
+    std::vector<uint32_t> GetMeanTxopMpduNum(Time period);
 
     void ClearStats();
 
@@ -343,17 +336,15 @@ public:
     std::vector<uint32_t> m_redundancyThreshold;
     uint32_t m_redundancyFixedNumber;
 
-    std::unordered_map<uint8_t, std::vector<double>> m_blockrateList; // 卡窗强度统计
-
-    std::unordered_map<uint8_t, std::vector<uint32_t>> m_txopTimeList; // 统计平均txop时间
+    std::unordered_map<uint8_t, std::vector<std::pair<Time, double>>> m_blockrateList; // 卡窗强度统计
 
     std::unordered_map<uint8_t, uint64_t> m_txopTimeBegin;
 
     std::unordered_map<uint8_t, uint64_t> m_txopTimeEnd;
 
-    std::unordered_map<uint8_t, std::vector<std::pair<uint64_t, uint64_t>>> m_txopList; // 统计每次txop时间间隔
+    std::unordered_map<uint8_t, std::vector<std::pair<uint64_t, uint64_t>>> m_txopList; // 统计每次txop时间间隔 (txop开始时间, txop结束时间)
 
-    std::unordered_map<uint8_t, std::vector<uint32_t>> m_txopNumList; // 统计每次获得txop时传输mpdu个数
+    std::unordered_map<uint8_t, std::vector<std::pair<uint64_t, uint32_t>>> m_txopNumList; // 统计每次获得txop时传输mpdu个数
 
     std::vector<uint32_t> m_inflighted; // 统计每条链路上正在传输个数
 

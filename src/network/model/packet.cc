@@ -1022,4 +1022,5 @@ uint32_t
 Packet::GetAdjustment() const {
     return  m_byteTagList.GetAdjustment();
 }
+
 } // namespace ns3

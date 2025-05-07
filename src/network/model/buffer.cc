@@ -563,7 +563,7 @@ Buffer::GetSerializedSize() const
     // + 4-bytes for dataEnd length
     // + X number of bytes for dataEnd
     uint32_t sz = sizeof(uint32_t) + sizeof(uint32_t) + dataStart + sizeof(uint32_t) + dataEnd;
-
+    std::cout << dataEnd << " " << dataStart << " " << m_end <<" " << m_start << " " <<m_zeroAreaEnd <<" " << m_zeroAreaStart << std::endl;
     return sz;
 }
 

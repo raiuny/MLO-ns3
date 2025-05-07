@@ -192,7 +192,8 @@ QosTxop::DoInitialize()
             MakeCallback(&MsduGrouper::NotifyDiscardedMpdu, GetMsduGrouper()));
 
         if(m_ac == AC_BE) {
-            Simulator::Schedule(Seconds(3), &QosTxop::ScheduleUpdateEdcaParameters, this, GetMsduGrouper()->GetPeriod()); 
+            Simulator::Schedule(Seconds(1), &QosTxop::ScheduleUpdateEdcaParameters, this, GetMsduGrouper()->GetPeriod());  // MLO alg update Parameters
+            Simulator::Schedule(Seconds(1), &QosTxop::PrintStatsResult, this, Seconds(0.5)); // print period result
         }
     }
 }
@@ -337,6 +338,8 @@ QosTxop::GetBaStartingSequence(Mac48Address address, uint8_t tid) const
 uint16_t
 QosTxop::GetBaStartingSequence(Mac48Address address, uint8_t tid, uint8_t linkId) const
 {
+    // if (m_mode & 0x01)
+    // std::cout << "StartingSequence on Link " << +linkId << " " <<  m_baManager->GetOriginatorStartingSequence(address, tid) <<" " <<m_baManager->GetOriginatorRptr(address, tid, linkId) << std::endl;
     if (m_mode & 0x03) return m_baManager->GetOriginatorRptr(address, tid, linkId);
     return m_baManager->GetOriginatorStartingSequence(address, tid);
 }
@@ -441,6 +444,13 @@ QosTxop::PeekNextMpdu(uint8_t linkId, uint8_t tid, Mac48Address recipient, Ptr<c
     };
 
     auto item = peek();
+    // if (m_mode & 0x01 && Simulator::Now() > Seconds(2.1)) {
+    //     std::cout << Simulator::Now() << " " << (item == nullptr) << " Link: " << +linkId << " tid: " << +tid << std::endl;
+    //     if (item) std::cout << "peek: " << item->GetHeader().GetSequenceNumber() << std::endl;
+    //     else {
+    //         std::cout << "peek: nullptr on link " << +linkId << std::endl;
+    //     }
+    // }
     // remove old packets (must be retransmissions or in flight, otherwise they did
     // not get a sequence number assigned)
     while (item && !item->IsFragment())
@@ -533,7 +543,7 @@ QosTxop::PeekNextMpdu(uint8_t linkId, uint8_t tid, Mac48Address recipient, Ptr<c
             // if (m_link_up & (1 << linkId) != 1) return nullptr;
             if (auto linkIds = item->GetInFlightLinkIds(); !linkIds.empty()) // MPDU is in-flight
             {
-                // 此MPDU已经在其他链路上发送,如果此链路冗余，可以在此链路上发送
+                // 此MPDU已经在其他链路上发送,如果此链路开启冗余模式，可以在此链路上发送
                 if (!linkIds.contains(linkId))
                 {
                     GetMsduGrouper()->m_inflighted[*linkIds.begin()] ++; 
@@ -541,7 +551,7 @@ QosTxop::PeekNextMpdu(uint8_t linkId, uint8_t tid, Mac48Address recipient, Ptr<c
                     {
                         NS_LOG_DEBUG("link" << +linkId << " 冗余，"
                                             << item->GetHeader().GetSequenceNumber() << "再次发送");
-                        // std::cout << "The MPDU is inflighted on Link " << (uint32_t) (* linkIds.begin()) << ", but can be sent on Link " << (uint32_t)linkId << ", the SN is " << item->GetHeader().GetSequenceNumber()  << " cnt: " << GetMsduGrouper().m_RedundantPacketCnt[linkId] << std::endl;
+                        // std::cout << "The MPDU is inflighted on Link " << (uint32_t) (* linkIds.begin()) << ", but can be sent on Link " << (uint32_t)linkId << ", the SN is " << item->GetHeader().GetSequenceNumber()  << " cnt: " << GetMsduGrouper()->m_RedundantPacketCnt[linkId] << std::endl;
                         break;
                     }
                 }
@@ -618,6 +628,7 @@ QosTxop::PeekNextMpdu(uint8_t linkId, uint8_t tid, Mac48Address recipient, Ptr<c
                         GetBaBufferSize(recipient, tid)))
         {
             NS_LOG_DEBUG("Packet beyond the end of the current transmit window");
+            // std::cout << "Packet beyond the end of the current transmit window" << " seq = " << sequence << std::endl;
             return nullptr;
         }
     }
@@ -975,83 +986,63 @@ QosTxop::GetAccessCategory() const
 void 
 QosTxop::ScheduleUpdateEdcaParameters(Time period)
 {
-    if (!(m_mode & 0x03) || m_mac->GetNLinks() < 2)
+    if (!(m_mode & 0x03) || m_mac->GetNLinks() < 2 || m_ac != AC_BE)
         return;
-    if (m_ac != AC_BE)
+    if (Simulator::Now() <= Seconds(1)) {
+        Simulator::Schedule(period, &QosTxop::ScheduleUpdateEdcaParameters, this, period);
         return;
-    std::cout<<"************Time: "<<Simulator::Now().GetSeconds()<<"s************"<<std::endl;
-    std::cout << "s, MAC ADDR: " << m_mac->GetAddress() << ": ("<< m_mode << "," << m_ac << ")" << std::endl;
-
-    std::cout <<"-----set-----"<<std::endl;
-    std::cout << "MAC ADDR: " << m_mac->GetAddress() << ": (" << m_mode << "," << m_ac << ")"<< std::endl;
-    std::cout << "CWmins " << GetMinCws()[0] << " " << GetMinCws()[1] << std::endl;
-    std::cout << "CWmaxs " << GetMaxCws()[0] << " " << GetMaxCws()[1] << std::endl; // 15, 1023
-    std::cout << "Aifsns " << (uint32_t)GetAifsns()[0] << " " << (uint32_t)GetAifsns()[1] << std::endl; // 3,3
-    std::cout << "TxopLimits " << GetTxopLimits()[0] << " " << GetTxopLimits()[1] << std::endl; // 0ns
-    std::cout << "BE_MaxAmpduSize " << m_mac->GetMaxAmpduSize(m_ac) << std::endl; 
-    std::cout << "link1Pct " << GetMsduGrouper()->GetLink1Pct() << std::endl; 
-    std::cout << "MaxGroupSize " << GetMsduGrouper()->GetMaxGroupSize() << std::endl; 
-    double Thp1 = GetMsduGrouper()->GetQueueStats().GetThroughput(0x00);
-    double Thp2 = GetMsduGrouper()->GetQueueStats().GetThroughput(0x01);
-    double s1 = GetMsduGrouper()->GetQueueStats().GetMpduSuccessRate(0x00);
-    double s2 = GetMsduGrouper()->GetQueueStats().GetMpduSuccessRate(0x01);
-    double chanrate1 = GetMsduGrouper()->GetQueueStats().GetChannelEfficiency(0x00);
-    double chanrate2 = GetMsduGrouper()->GetQueueStats().GetChannelEfficiency(0x01);
-    double avgdatarate1 = GetMsduGrouper()->GetQueueStats().GetAverageDataRate(0x00);
-    double avgdatarate2 = GetMsduGrouper()->GetQueueStats().GetAverageDataRate(0x01);
-    std::vector<double> blocktimerate = GetMsduGrouper()->GetQueueStats().GetBlockTimeRateAndClear();
-
-    auto blockCnt = GetMsduGrouper()->GetQueueStats().m_blockCnt;
-    auto blockCnt_prev = GetMsduGrouper()->GetQueueStats().m_blockCnt_prev;
-    std::vector<uint32_t> res_blockCnt = {blockCnt[0] - blockCnt_prev[0],
-                                          blockCnt[1] - blockCnt_prev[1]};
-    GetMsduGrouper()->GetQueueStats().m_blockCnt_prev = blockCnt;
-    auto blockCnt_tr = GetMsduGrouper()->GetQueueStats().m_blockCnt_tr;
-    auto blockCnt_tr_prev = GetMsduGrouper()->GetQueueStats().m_blockCnt_tr_prev;
-    GetMsduGrouper()->GetQueueStats().m_blockCnt_tr_prev = blockCnt_tr;
-    std::vector<uint32_t> res_blockCnt_tr = {blockCnt_tr[0] - blockCnt_tr_prev[0],
-                                             blockCnt_tr[1] - blockCnt_tr_prev[1]};
-
-    auto blockrate = GetMsduGrouper()->GetMeanBlockRate();
-
-    auto bawqueue = GetMsduGrouper()->GetQueueStats().GetBawQueue();
-    std::cout << "************Time: " << Simulator::Now().GetSeconds() << "s************"
-              << std::endl;
+    }
+    double Thp1 = GetMsduGrouper()->GetQueueStats().GetThroughput(0, period / 2);
+    double Thp2 = GetMsduGrouper()->GetQueueStats().GetThroughput(1, period / 2);
+    double p1 = GetMsduGrouper()->GetQueueStats().GetMpduSuccessRate(0, period / 2);
+    double p2 = GetMsduGrouper()->GetQueueStats().GetMpduSuccessRate(1, period / 2);
+    double chanrate1 = GetMsduGrouper()->GetQueueStats().GetChannelEfficiency(0, period / 2);
+    double chanrate2 = GetMsduGrouper()->GetQueueStats().GetChannelEfficiency(1, period / 2);
+    double avgdatarate1 = GetMsduGrouper()->GetQueueStats().GetAverageDataRate(0, period / 2);
+    double avgdatarate2 = GetMsduGrouper()->GetQueueStats().GetAverageDataRate(1, period / 2);
+    std::vector<double> blocktimerate = GetMsduGrouper()->GetQueueStats().GetBlockTimeRate(period / 2);
+    auto blockCnt_total = GetMsduGrouper()->GetQueueStats().GetBlockCnt(Seconds(0));
+    auto blockCnt = GetMsduGrouper()->GetQueueStats().GetBlockCnt(period / 2);
+    auto blockCnt_other_inflight = GetMsduGrouper()->GetQueueStats().GetBlockCnt_other_inflight(period / 2);
+    auto blockrate = GetMsduGrouper()->GetMeanBlockRate(period / 2);
+    // auto bawqueue = GetMsduGrouper()->GetQueueStats().GetBawQueue();
+    std::cout << "\n************ Update Time: " << Simulator::Now().GetSeconds() << "s************"
+    << std::endl;
     std::cout << Simulator::Now().GetSeconds() << "s, MAC ADDR: " << m_mac->GetAddress() << ": ("
-              << m_mode << "," << m_ac << ")" << std::endl;
-    std::cout << "Window Blocked Count: " << blockCnt[0] << " , " << blockCnt[1] << std::endl;
-    std::cout << "Thp1: " << Thp1 << "Mbps, Thp2: " << Thp2 << "Mbps" << std::endl;
-    std::cout << "s1: " << s1 << ", s2: " << s2 << std::endl;
-    std::cout << "chanrate1: " << chanrate1 << ", chanrate2: " << chanrate2 << "" << std::endl;
-    std::cout << "avgdatarate1: " << avgdatarate1 << "Mbps, avgdatarate2: " << avgdatarate2
-              << "Mbps" << std::endl;
+                << m_mode << "," << m_ac << ")" << std::endl;
+    std::cout << "Window Blocked Count Total: " << blockCnt_total[0] << " , " << blockCnt_total[1] << std::endl;
+    std::cout << "Throughput on 2.4G: " << Thp1 << "Mbps, Throughput on 5G: " << Thp2 << "Mbps" << std::endl;
+    std::cout << "p1: " << p1 << ", p2: " << p2 << std::endl;
+    std::cout << "channel efficiency on 2.4G: " << chanrate1 << ", channel efficiency on 5G: " << chanrate2 << "" << std::endl;
+    std::cout << "avg datarate on 2.4G: " << avgdatarate1 << "Mbps, avg datarate on 5G: " << avgdatarate2
+                << "Mbps" << std::endl;
     std::cout << "blocktimerate: " << blocktimerate[0] << ", " << blocktimerate[1] << std::endl;
     std::cout << "blockrate: " << blockrate[0] << ", " << blockrate[1] << std::endl;
-    // for(auto it = bawqueue.begin(); it != bawqueue.end(); it++)
-    // {
-    //     std::cout << "BawQueue: " << it->first.first << " " << (int)it->first.second << std::endl;
-    //     for(auto it2 = it->second.begin(); it2 != it->second.end(); it2++)
-    //     {
-    //         std::cout << "BawQueueItem: " << it2->sepNum << " retry: " << (int)it2->retryState << " assign: " << (int)it2->assignState << " acked: " << it2->acked << " discarded: " << it2->discarded << std::endl;
-    //     }
-    // }
-    std::cout<<"\n";
+    std::cout << "blockCnt: " << blockCnt[0] << " , " << blockCnt[1] << std::endl;
+    std::cout << "blockCnt when another link tx: " << blockCnt_other_inflight[0] << " , " << blockCnt_other_inflight[1] << std::endl;
+    std::vector<uint32_t> lengths1 = GetMsduGrouper()->GetQueueStats().GetRecentAMPDULengths(0, period / 2);
+    std::vector<uint32_t> lengths2 = GetMsduGrouper()->GetQueueStats().GetRecentAMPDULengths(1, period / 2);
+    uint32_t maxlen1 = *std::max_element(lengths1.begin(), lengths1.end());
+    uint32_t maxlen2 = *std::max_element(lengths2.begin(), lengths2.end());
+    uint32_t meanlen1 = std::accumulate(lengths1.begin(), lengths1.end(), 0.0) / (lengths1.size() == 0 ? 1 : lengths1.size());
+    uint32_t meanlen2 = std::accumulate(lengths2.begin(), lengths2.end(), 0.0) / (lengths2.size() == 0 ? 1 : lengths2.size());
+    std::cout << "maxAmpduLength: " << maxlen1 << ", " << maxlen2 << std::endl;
+    std::cout << "meanAmpduLength: " << meanlen1 << ", " << meanlen2 << std::endl;
 
-    // Update Params
-    std::vector<uint32_t> maxAmpduLength = GetMsduGrouper()->GetMaxAmpduLength();
-    std::vector<uint32_t> meanAmpduLength = GetMsduGrouper()->GetMeanAmpduLength();
-    std::cout << "blockCnt: " << res_blockCnt[0] << " , " << res_blockCnt[1] << std::endl;
-    std::cout << "blockCnt_tr: " << res_blockCnt_tr[0] << " , " << res_blockCnt_tr[1] << std::endl;
-    std::cout << "maxAmpduLength: " << maxAmpduLength[0] << ", " << maxAmpduLength[1] << std::endl;
-    std::cout << "meanAmpduLength: " << meanAmpduLength[0] << ", " << meanAmpduLength[1] << std::endl;
-    if (GetMsduGrouper()->IsGridSearchEnabled()) {
+    if (GetMsduGrouper()->IsGridSearchEnabled()) { // 网格搜索最优参数，场景需固定
         std::unordered_map<std::string, std::vector<uint32_t>> params = GetMsduGrouper()->GetCurrentEdcaParameters();
         std::unordered_map<std::string, std::vector<uint32_t>> next_params = GetMsduGrouper()->GetNextEdcaParameters();
-        auto & txopTimeList = GetMsduGrouper()->m_txopTimeList;
-        auto txoptime1 = std::accumulate(txopTimeList[0].begin(), txopTimeList[0].end(), 0) / (txopTimeList[0].size() == 0 ? 1 : txopTimeList[0].size());
-        auto txoptime2 = std::accumulate(txopTimeList[1].begin(), txopTimeList[1].end(), 0) / (txopTimeList[1].size() == 0 ? 1 : txopTimeList[1].size());
-        uint32_t txopnum1 = txopTimeList[0].size();
-        uint32_t txopnum2 = txopTimeList[1].size();
+        const auto meanTxopTime = GetMsduGrouper()->GetMeanTxopTime(period / 2);
+        const auto meanTxopMpduNum = GetMsduGrouper()->GetMeanTxopMpduNum(period / 2);
+        uint32_t txoplimit = 0;
+        uint16_t winSize = 256;
+        txoplimit = winSize / (p1 * avgdatarate1 / 3006 + p2 * avgdatarate2 / 3006) / 32;
+        std::cout << meanTxopTime[0] << " , " << meanTxopTime[1] << std::endl;
+        std::cout << meanTxopMpduNum[0] << " , " << meanTxopMpduNum[1] << std::endl;
+        std::vector<double> txoptime_permpdu = {(double) meanTxopTime[0] / (meanTxopMpduNum[0] + 1e-6), (double) meanTxopTime[1] / (meanTxopMpduNum[1] + 1e-6)};
+        uint32_t txoplimit2 = ceil(winSize / (p1 / (txoptime_permpdu[0] + 1e-6) + p2 / (txoptime_permpdu[1] + 1e-6))) / 32;
+        std::cout << "Set Txoplimit: " << txoplimit << ", " << txoplimit2 << std::endl;
+        next_params["TxopLimits"] = {0, 0};
         if (params.empty()) {
             params["No"] = {0};
             params["CWmins"] = GetMinCws();
@@ -1073,17 +1064,17 @@ QosTxop::ScheduleUpdateEdcaParameters(Time period)
             TracedParamsAndStats(params,
                                  GetMsduGrouper()->GetLink1Pct(),
                                  {Thp1, Thp2},
-                                 {s1, s2},
+                                 {p1, p2},
                                  {chanrate1, chanrate2},
                                  {avgdatarate1, avgdatarate2},
                                  blocktimerate,
                                  blockrate,
-                                 res_blockCnt,
-                                 res_blockCnt_tr,
-                                 {txoptime1, txoptime2},
-                                 {txopnum1, txopnum2},
-                                 maxAmpduLength,
-                                 meanAmpduLength);
+                                 blockCnt,
+                                 blockCnt_other_inflight,
+                                 meanTxopTime,
+                                 meanTxopMpduNum,
+                                 {maxlen1, maxlen2},
+                                 {meanlen1, meanlen2});
         if (!TracedTxopTime.IsEmpty())
             TracedTxopTime(GetMsduGrouper()->m_txopList, GetMsduGrouper()->m_txopNumList);
 
@@ -1091,83 +1082,15 @@ QosTxop::ScheduleUpdateEdcaParameters(Time period)
             Simulator::Schedule(period, &QosTxop::ScheduleUpdateEdcaParameters, this, period);
             return;
         }
-        if (GetMsduGrouper()->IsParamUpdateEnabled()) {
-            // CWmin, CWmax
-            SetMinCws(next_params["CWmins"]);
-            SetMaxCws(next_params["CWmaxs"]);
-
-            // TxopLimits
-            m_alg_txop_limits = next_params["TxopLimits"];
-
-            // Aifsns
-            SetAifsns(std::vector<uint8_t>(next_params["Aifsns"].begin(), next_params["Aifsns"].end()));
-
-            // RTS/CTS 开启关闭
-            for (uint8_t i = 0; i < 2; ++ i) {
-                if (next_params["RTS_CTS"][i])
-                    m_mac->GetWifiRemoteStationManager(i)->SetRtsCtsThreshold(0);
-                else m_mac->GetWifiRemoteStationManager(i)->SetRtsCtsThreshold(std::numeric_limits<uint32_t>::max());
-            }
-
-            // 聚合参数
-
-            // m_mac->SetAttribute("BE_MaxAmpduSize", UintegerValue(65536));
-
-            // 重传次数
-            for (uint8_t i = 0; i < 2; ++ i) {
-                m_mac->GetWifiRemoteStationManager(i)->SetMaxSlrc(params["MaxSlrcs"][i]); // 7
-                m_mac->GetWifiRemoteStationManager(i)->SetMaxSsrc(params["MaxSsrcs"][i]); // 4
-            }
-        
-            // 冗余参数
-            GetMsduGrouper()->UpdateRedundancyThreshold(next_params["RedundancyThresholds"]);
-
-            GetMsduGrouper()->UpdateRedundancyFixedNumber(next_params["RedundancyFixedNumbers"][0]);
-
-        }
+        SetParams(next_params);
         GetMsduGrouper()->ClearStats();
     } else {
-        std::unordered_map<std::string, std::vector<uint32_t>> params = GetMsduGrouper()->GetNewEdcaParameters();
-
-
-        if (!params.size()) {
+        std::unordered_map<std::string, std::vector<uint32_t>> new_params = GetMsduGrouper()->GetNewEdcaParameters();
+        if (!new_params.size()) {
             Simulator::Schedule(period, &QosTxop::ScheduleUpdateEdcaParameters, this, period);
             return;
         }
-
-        // CWmin, CWmax
-        // SetMinCws(params["CWmins"]);
-        // SetMaxCws(params["CWmaxs"]);
-
-        // TxopLimits
-        // std::vector<Time> new_txopLimits;
-        // for (auto t : params["TxopLimits"]) {
-        //     new_txopLimits.push_back(MicroSeconds(t)); // us
-        // }
-        // SetTxopLimits(new_txopLimits); // 32 us的整数倍
-
-        // Aifsns
-        // SetAifsns(std::vector<uint8_t>(params["Aifsns"].begin(), params["Aifsns"].end()));
-
-        // RTS/CTS 开启关闭
-        // for (uint8_t i = 0; i < 2; ++ i) {
-        //     if (params["RTS_CTS"][i])
-        //         m_mac->GetWifiRemoteStationManager(i)->SetRtsCtsThreshold(0);
-        //     else m_mac->GetWifiRemoteStationManager(i)->SetRtsCtsThreshold(std::numeric_limits<uint32_t>::max());
-        // }
-
-        // 聚合参数
-
-        // m_mac->SetAttribute("BE_MaxAmpduSize", UintegerValue(params["AmpduSizes"][0]));
-
-        // 重传次数
-        // for (uint8_t i = 0; i < 2; ++ i) {
-        //     m_mac->GetWifiRemoteStationManager(i)->SetMaxSlrc(params["MaxSlrcs"][i]); // 7
-        //     m_mac->GetWifiRemoteStationManager(i)->SetMaxSsrc(params["MaxSsrcs"][i]); // 5
-        // }
-
-        // 冗余参数
-        // GetMsduGrouper().UpdateRedundancyThreshold(params["RedundancyThreshold"]);
+        SetParams(new_params);
     }
 
     Simulator::Schedule(period, &QosTxop::ScheduleUpdateEdcaParameters, this, period);
@@ -1192,4 +1115,104 @@ QosTxop::SetLinkUp(uint8_t newLinkUp) {
     m_link_up = newLinkUp;
 }
 
+void
+QosTxop::PrintStatsResult(Time period)
+{
+    if (!(m_mode & 0x03) || m_mac->GetNLinks() < 2 || m_ac != AC_BE)
+        return;
+    if (Simulator::Now() <= Seconds(1)) {
+        Simulator::Schedule(period, &QosTxop::PrintStatsResult, this, period);
+        return;
+    }
+    std::cout << "************Time: " << Simulator::Now().GetSeconds() << "s************"
+              << std::endl;
+    std::cout << "MAC ADDR: " << m_mac->GetAddress() << ": ( mode " << m_mode << "," << m_ac << ")"
+              << std::endl;
+    std::cout << "-----Params-----" << std::endl;
+    std::cout << "CWmins " << GetMinCws()[0] << " " << GetMinCws()[1] << std::endl;
+    std::cout << "CWmaxs " << GetMaxCws()[0] << " " << GetMaxCws()[1] << std::endl; // 15, 1023
+    std::cout << "Aifsns " << (uint32_t)GetAifsns()[0] << " " << (uint32_t)GetAifsns()[1]
+              << std::endl; // 3,3
+    std::cout << "TxopLimits " << GetTxopLimits()[0] << " " << GetTxopLimits()[1]
+              << std::endl; // 0ns
+    std::cout << "BE_MaxAmpduSize " << m_mac->GetMaxAmpduSize(m_ac) << std::endl;
+    std::cout << "link1Pct " << GetMsduGrouper()->GetLink1Pct() << std::endl;
+    std::cout << "MaxGroupSize " << GetMsduGrouper()->GetMaxGroupSize() << std::endl;
+    double Thp1 = GetMsduGrouper()->GetQueueStats().GetThroughput(0, period);
+    double Thp2 = GetMsduGrouper()->GetQueueStats().GetThroughput(1, period);
+    double p1 = GetMsduGrouper()->GetQueueStats().GetMpduSuccessRate(0, period);
+    double p2 = GetMsduGrouper()->GetQueueStats().GetMpduSuccessRate(1, period);
+    double chanrate1 = GetMsduGrouper()->GetQueueStats().GetChannelEfficiency(0, period);
+    double chanrate2 = GetMsduGrouper()->GetQueueStats().GetChannelEfficiency(1, period);
+    double avgdatarate1 = GetMsduGrouper()->GetQueueStats().GetAverageDataRate(0, period);
+    double avgdatarate2 = GetMsduGrouper()->GetQueueStats().GetAverageDataRate(1, period);
+    std::vector<double> blocktimerate = GetMsduGrouper()->GetQueueStats().GetBlockTimeRate(period);
+
+    auto blockCnt_total = GetMsduGrouper()->GetQueueStats().GetBlockCnt(Seconds(0));
+    auto blockCnt = GetMsduGrouper()->GetQueueStats().GetBlockCnt(period);
+    auto blockCnt_other_inflight = GetMsduGrouper()->GetQueueStats().GetBlockCnt_other_inflight(period);
+    auto blockrate = GetMsduGrouper()->GetMeanBlockRate(period);
+    // auto bawqueue = GetMsduGrouper()->GetQueueStats().GetBawQueue();
+    std::cout << std::endl;
+    std::cout << Simulator::Now().GetSeconds() << "s, MAC ADDR: " << m_mac->GetAddress() << ": ("
+              << m_mode << "," << m_ac << ")" << std::endl;
+    std::cout << "Window Blocked Count Total: " << blockCnt_total[0] << " , " << blockCnt_total[1] << std::endl;
+    std::cout << "Throughput on 2.4G: " << Thp1 << "Mbps, Throughput on 5G: " << Thp2 << "Mbps" << std::endl;
+    std::cout << "Total Throughput: " << Thp1 + Thp2 << "Mbps" << std::endl;
+    std::cout << "p1: " << p1 << ", p2: " << p2 << std::endl;
+    std::cout << "channel efficiency on 2.4G: " << chanrate1 << ", channel rate on 5G: " << chanrate2 << "" << std::endl;
+    std::cout << "avg datarate on 2.4G: " << avgdatarate1 << "Mbps, avg datarate on 5G: " << avgdatarate2
+              << "Mbps" << std::endl;
+    std::cout << "blocktimerate: " << blocktimerate[0] << ", " << blocktimerate[1] << std::endl;
+    std::cout << "blockrate: " << blockrate[0] << ", " << blockrate[1] << std::endl;
+    std::cout << "blockCnt: " << blockCnt[0] << " , " << blockCnt[1] << std::endl;
+    std::cout << "blockCnt when another link tx: " << blockCnt_other_inflight[0] << " , " << blockCnt_other_inflight[1] << std::endl;
+    std::vector<uint32_t> lengths1 = GetMsduGrouper()->GetQueueStats().GetRecentAMPDULengths(0, period);
+    std::vector<uint32_t> lengths2 = GetMsduGrouper()->GetQueueStats().GetRecentAMPDULengths(1, period);
+    auto maxlen1 = *std::max_element(lengths1.begin(), lengths1.end());
+    auto maxlen2 = *std::max_element(lengths2.begin(), lengths2.end());
+    auto meanlen1 = std::accumulate(lengths1.begin(), lengths1.end(), 0.0) / (lengths1.size() == 0 ? 1 : lengths1.size());
+    auto meanlen2 = std::accumulate(lengths2.begin(), lengths2.end(), 0.0) / (lengths2.size() == 0 ? 1 : lengths2.size());
+    std::cout << "maxAmpduLength: " << maxlen1 << ", " << maxlen2 << std::endl;
+    std::cout << "meanAmpduLength: " << meanlen1 << ", " << meanlen2 << std::endl;
+    Simulator::Schedule(period, &QosTxop::PrintStatsResult, this, period);
+}
+
+
+void 
+QosTxop::SetParams(std::unordered_map<std::string, std::vector<uint32_t>> next_params) {
+    if (GetMsduGrouper() && GetMsduGrouper()->IsParamUpdateEnabled()) {
+        // CWmin, CWmax
+        SetMinCws(next_params["CWmins"]);
+        SetMaxCws(next_params["CWmaxs"]);
+
+        // TxopLimits
+        m_alg_txop_limits = next_params["TxopLimits"];
+
+        // Aifsns
+        SetAifsns(std::vector<uint8_t>(next_params["Aifsns"].begin(), next_params["Aifsns"].end()));
+
+        // RTS/CTS 开启关闭
+        // for (uint8_t i = 0; i < 2; ++ i) {
+        //     if (next_params["RTS_CTS"][i])
+        //         m_mac->GetWifiRemoteStationManager(i)->SetRtsCtsThreshold(0);
+        //     else m_mac->GetWifiRemoteStationManager(i)->SetRtsCtsThreshold(std::numeric_limits<uint32_t>::max());
+        // }
+
+        // 聚合参数
+
+        // m_mac->SetAttribute("BE_MaxAmpduSize", UintegerValue(65536));
+
+        // 重传次数
+        // for (uint8_t i = 0; i < 2; ++ i) {
+        //     m_mac->GetWifiRemoteStationManager(i)->SetMaxSlrc(next_params["MaxSlrcs"][i]); // 7
+        //     m_mac->GetWifiRemoteStationManager(i)->SetMaxSsrc(next_params["MaxSsrcs"][i]); // 4
+        // }
+    
+        // 冗余参数
+        // GetMsduGrouper()->UpdateRedundancyThreshold(next_params["RedundancyThresholds"]);
+
+        // GetMsduGrouper()->UpdateRedundancyFixedNumber(next_params["RedundancyFixedNumbers"][0]);
+    }
+}
 } // namespace ns3

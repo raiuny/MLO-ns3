@@ -1,5 +1,5 @@
 {
-    "CWmin": [15,15],
+    "CWmin": [1,1],
     "Aifsn": [2,2],
     "RTS/CTS": [0,0],
     "TxopLimits": [124, 124],

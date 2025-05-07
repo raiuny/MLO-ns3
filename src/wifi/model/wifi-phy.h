@@ -163,7 +163,7 @@ class WifiPhy : public Object
      * \param linkAckEnable pointer to vector indicating link acknowledgment status
      */
     void Send(const WifiConstPsduMap& psdus, const WifiTxVector& txVector);
-    void Send(const WifiConstPsduMap& psdus, const WifiTxVector& txVector, uint8_t linkId, std::vector<bool> & linkTxStatus);
+    void DoSend(const WifiConstPsduMap& psdus, const WifiTxVector& txVector, uint8_t linkId, std::vector<bool> & linkTxStatus);
 
     /**
      * \param ppdu the PPDU to send

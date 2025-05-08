@@ -434,7 +434,7 @@ class QosTxop : public Txop
 
     void PrintStatsResult(Time period);
 
-    void SetParams(std::unordered_map<std::string, std::vector<uint32_t>> params);
+    void SetParams(const mldParams& next_params);
 
     bool IsLinkUp(uint8_t linkId);
 
@@ -486,8 +486,9 @@ class QosTxop : public Txop
     TxopTracedCallback m_txopTrace; //!< TXOP trace callback
     
     uint8_t m_link_up;
-    TracedCallback<std::unordered_map<std::string, std::vector<uint32_t>>,
+    TracedCallback<mldParams,
                    double /*link1Pct*/,
+                   double /*Time*/,
                    std::vector<double> /* throughput */,
                    std::vector<double> /* MPDU success rate*/,
                    std::vector<double> /* occupy rate */,

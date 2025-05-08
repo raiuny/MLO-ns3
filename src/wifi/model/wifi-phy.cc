@@ -1888,7 +1888,7 @@ WifiPhy::Send(const WifiConstPsduMap& psdus, const WifiTxVector& txVector)
     maxMpduCount = firstPsdu->GetNMpdus();
     maxMsduCount = firstPsdu->GetNMsdus();
     Time transmissionDelay = CalculateTransmissionDelay(txVector.IsAggregation(), maxMpduCount, maxMsduCount);
-    std::cout << "WifiPhySend: "<< txVector.IsAggregation() << " " << transmissionDelay.As(Time::US) << " " << maxMpduCount << " " << maxMsduCount << std::endl;
+    // std::cout << "WifiPhySend: "<< txVector.IsAggregation() << " " << transmissionDelay.As(Time::US) << " " << maxMpduCount << " " << maxMsduCount << std::endl;
     // if(transmissionDelay != MicroSeconds(0))
     // {
     //     std::cout<<"maxMpduCount: "<<maxMpduCount<<std::endl;

@@ -70,7 +70,7 @@ QueueStats::GetChannelEfficiency(uint8_t linkId, Time period)
         for (auto it = m_ppduinfos.rbegin(); it != m_ppduinfos.rend(); it++)
         {
             if (Simulator::Now() - it->m_mpduinfos[0].m_txTime < period &&
-                (it->m_mpduinfos[0].m_linkIds & (1 << linkId)))
+                (it->linkId & (1 << linkId)))
             {
                 totalduration += it->txDuration;
             }
@@ -81,7 +81,7 @@ QueueStats::GetChannelEfficiency(uint8_t linkId, Time period)
     {
         for (auto it = m_ppduinfos.rbegin(); it != m_ppduinfos.rend(); it++)
         {
-            if ((it->m_mpduinfos[0].m_linkIds & (1 << linkId)))
+            if ((it->linkId & (1 << linkId)))
             {
                 totalduration += it->txDuration;
             }
@@ -147,7 +147,7 @@ QueueStats::GetAverageDataRate(uint8_t linkId, Time period)
         for (auto it = m_ppduinfos.rbegin(); it != m_ppduinfos.rend(); it++)
         {
             if (it->txDuration.IsStrictlyPositive() &&
-                (it->m_mpduinfos[0].m_linkIds & (linkId + 1)) &&
+                (it->linkId & (linkId + 1)) &&
                 (Simulator::Now() - it->txTime < period))
             {
                 datarate += it->m_mpduinfos[0].DataRate * it->txDuration.GetSeconds();
@@ -160,7 +160,7 @@ QueueStats::GetAverageDataRate(uint8_t linkId, Time period)
         for (auto it = m_ppduinfos.rbegin(); it != m_ppduinfos.rend(); it++)
         {
             if (it->txDuration.IsStrictlyPositive() &&
-                (it->m_mpduinfos[0].m_linkIds & (linkId + 1)))
+                (it->linkId & (linkId + 1)))
             {
                 datarate += it->m_mpduinfos[0].DataRate * it->txDuration.GetSeconds();
                 totalduration += it->txDuration;
@@ -202,7 +202,7 @@ QueueStats::GetBlockCnt(Time period) {
             double cnt = 0;
             for (const auto& it : blockwindow_time[linkId])
             {
-                if (it.first > Simulator::Now() - period)
+                if (it.first >= Simulator::Now() - period)
                 {
                     ++cnt;
                 }
@@ -228,7 +228,7 @@ QueueStats::GetBlockCnt_other_inflight(Time period = Seconds(0)) {
             double cnt = 0;
             for (const auto& it : blockwindow_time_other_inflight[linkId])
             {
-                if (it > Simulator::Now() - period)
+                if (it >= Simulator::Now() - period)
                 {
                     ++cnt;
                 }
@@ -351,7 +351,7 @@ MsduGrouper::MsduGrouper(uint32_t maxGroupSize,
     m_queueStats = QueueStats(m_period, mac);
     m_maxRedundantPackets = {2, 2};
     m_RedundantPacketCnt = {0, 0};
-    m_redundancyFixedNumber = 0;
+    m_redundancyFixedNumber = {0, 0};
     m_inflighted = {0, 0};
     m_gs_enable = false;
     m_param_update = false;
@@ -517,6 +517,7 @@ MsduGrouper::NotifyPpduTxDuration(Ptr<const WifiPpdu> ppdu, Time duration, uint8
     if (!ppdu->GetPsdu()->GetHeader(0).IsQosData())
         return;
     PPDUInfo ppduinfo;
+    ppduinfo.linkId = 1 << linkId;
     ppduinfo.txDuration = duration;
     ppduinfo.txTime = Simulator::Now();
     Ptr<const WifiPsdu> psdu = ppdu->GetPsdu();
@@ -737,6 +738,7 @@ MsduGrouper::UpdateAmpduSize(uint8_t linkId, uint32_t size)
             }
             if (m_inflighted[1 - linkId])
                 m_queueStats.blockwindow_time_other_inflight[linkId].push_back(Simulator::Now());
+            
         }
         else
         {
@@ -750,45 +752,56 @@ MsduGrouper::UpdateAmpduSize(uint8_t linkId, uint32_t size)
             }
         }
     }
-
+    // if (size == 0) {
+    //     // 卡窗发生时候，开启冗余模式
+    //     SetRedundancyMode(linkId, 256);
+    //     return true;
+    // }
     return false;
 }
 
-std::unordered_map<std::string, std::vector<uint32_t>>
+mldParams
 MsduGrouper::GetNextEdcaParameters()
 {
-    const auto& params = m_gs->GetNext();
-    std::unordered_map<std::string, std::vector<uint32_t>> next_params;
-    next_params["No"] = {params.No};
-    next_params["CWmins"] = params.CWmins;
-    next_params["CWmaxs"] = params.CWmaxs;
-    next_params["TxopLimits"] = params.TxopLimits;
-    next_params["Aifsns"] = params.Aifsns;
-    next_params["AmpduSizes"] = params.AmpduSizes;
-    next_params["RTS_CTS"] = params.RTS_CTS;
-    next_params["MaxSlrcs"] = params.MaxSlrcs;
-    next_params["MaxSsrcs"] = params.MaxSsrcs;
-    next_params["RedundancyThresholds"] = params.RedundancyThresholds;
-    m_current_params = next_params;
-
-    std::cout << "MaxAmpduSize: " << m_maxAmpduSize[0] << " " << m_maxAmpduSize[1] << std::endl;
-    return next_params;
+    auto params = m_gs->GetNext();
+    m_current_params = params;
+    return params;
 }
 
-std::unordered_map<std::string, std::vector<uint32_t>>
+mldParams
 MsduGrouper::GetCurrentEdcaParameters()
 {
     return m_current_params;
 }
 
-std::unordered_map<std::string, std::vector<uint32_t>>
-MsduGrouper::GetNewEdcaParameters()
+mldParams
+MsduGrouper::GetNewEdcaParameters(bool initial)
 {
-    std::cout << "MaxAmpduSize: " << m_maxAmpduSize[0] << " " << m_maxAmpduSize[1] << std::endl;
-    std::unordered_map<std::string, std::vector<uint32_t>> next_params;
-    next_params["MaxSlrcs"] = std::vector<uint32_t>{10000, 10000};
-    next_params["MaxSsrcs"] = {5, 5};
-    return next_params;
+    const auto meanTxopTime = GetMeanTxopTime(m_period / 2);
+    const auto meanTxopMpduNum = GetMeanTxopMpduNum(m_period / 2);
+    uint32_t txoplimit = 0;
+    if (!initial) {
+        uint16_t winSize = 256;
+        std::cout << meanTxopTime[0] << " , " << meanTxopTime[1] << std::endl;
+        std::cout << meanTxopMpduNum[0] << " , " << meanTxopMpduNum[1] << std::endl;
+        std::vector<double> txoptime_permpdu = {(double) meanTxopTime[0] / (meanTxopMpduNum[0] + 1e-6), (double) meanTxopTime[1] / (meanTxopMpduNum[1] + 1e-6)};
+        txoplimit = ceil(winSize / (1 / (txoptime_permpdu[0] + 1e-6) + 1 / (txoptime_permpdu[1] + 1e-6))) / 32;
+        txoplimit = 0;
+        std::cout << "MLO Algorithm to Set Txoplimit: " << txoplimit << std::endl;
+    }
+    mldParams params;
+    params.No = 1;
+    params.Aifsns = {2, 2};
+    params.CWmins = {1, 1};
+    params.CWmaxs = {3, 3};
+    params.MaxSlrcs = {std::numeric_limits<uint32_t>::max(), std::numeric_limits<uint32_t>::max()};
+    params.MaxSsrcs = {std::numeric_limits<uint32_t>::max(), std::numeric_limits<uint32_t>::max()};
+    params.RTS_CTS = {0, 0};
+    params.AmpduSizes = {1024 * 4 * (700 + 150), 1024 * 4 * (700 + 150)};
+    params.RedundancyFixedNumbers = {0, 0};
+    params.RedundancyThresholds = {0.5, 0.5};
+    params.TxopLimits = {txoplimit, txoplimit};
+    return params;
 }
 
 std::pair<uint8_t, Time>
@@ -823,7 +836,7 @@ MsduGrouper::UpdateRedundancyCnt(uint8_t linkId)
 }
 
 void
-MsduGrouper::UpdateRedundancyThreshold(const std::vector<uint32_t> thresholds)
+MsduGrouper::UpdateRedundancyThreshold(const std::vector<double> thresholds)
 {
     m_redundancyThreshold = thresholds;
 }
@@ -841,7 +854,7 @@ MsduGrouper::IsParamUpdateEnabled()
 }
 
 void
-MsduGrouper::UpdateRedundancyFixedNumber(const uint32_t n)
+MsduGrouper::UpdateRedundancyFixedNumber(const std::vector<uint32_t> n)
 {
     m_redundancyFixedNumber = n;
 }
@@ -914,7 +927,7 @@ MsduGrouper::GetMeanTxopTime(Time period) {
             uint32_t txopcnt = 0;
             for (const auto& it : m_txopList[linkId])
             {
-                if (it.first > Simulator::Now().GetMicroSeconds() - period.GetMicroSeconds())
+                if (it.first > (uint32_t)(Simulator::Now().GetMicroSeconds() - period.GetMicroSeconds()))
                 {
                     txoptime += it.second - it.first;
                     txopcnt ++;
@@ -937,7 +950,7 @@ MsduGrouper::GetMeanTxopMpduNum(Time period) {
             uint32_t txopcnt = 0;
             for (const auto& it : m_txopNumList[linkId])
             {
-                if (it.first > Simulator::Now().GetMicroSeconds() - period.GetMicroSeconds())
+                if (it.first > (uint32_t)(Simulator::Now().GetMicroSeconds() - period.GetMicroSeconds()))
                 {
                     txopmpdunum += it.second;
                     txopcnt ++;

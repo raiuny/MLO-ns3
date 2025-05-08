@@ -347,7 +347,8 @@ HtFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
     {
         return true;
     }
-
+    if (edca->GetMsduGrouper())
+        edca->GetMsduGrouper()->ResetInflighedCnt();
     Ptr<WifiMpdu> peekedItem = edca->PeekNextMpdu(m_linkId);
 
     // Even though channel access is requested when the queue is not empty, at
@@ -359,7 +360,6 @@ HtFrameExchangeManager::StartFrameExchange(Ptr<QosTxop> edca, Time availableTime
         if (edca->GetMsduGrouper())
         {
             // std::cout << "No frames available for transmission on " << +m_linkId << std::endl;
-            edca->GetMsduGrouper()->ResetInflighedCnt();
             edca->GetMsduGrouper()->UpdateAmpduSize(m_linkId, 0);
             peekedItem = edca->PeekNextMpdu(m_linkId);
         }
@@ -652,7 +652,7 @@ HtFrameExchangeManager::SendDataFrame(Ptr<WifiMpdu> peekedItem,
         if (edca->GetMsduGrouper()->GetRedundancyMode(m_linkId))
             edca->GetMsduGrouper()->ResetRedundancyMode(m_linkId);
     }
-    // if (Simulator::Now()> Seconds(1.1) && edca->GetMsduGrouper()) {
+    // if (Simulator::Now()> Seconds(1.0) && edca->GetMsduGrouper()) {
     //     std::cout << Simulator::Now() << " SendDataFrame on Link " << (uint32_t)m_linkId << std::endl << "[";
     //     for (const auto & it : mpduList) {
     //         std::cout << it->GetHeader().GetSequenceNumber() << ", ";

@@ -50,6 +50,7 @@ struct PPDUInfo
     Time txTime;
     Time txDuration;
     std::vector<MPDUInfo> m_mpduinfos;
+    uint8_t linkId;
 };
 
 
@@ -122,7 +123,7 @@ public:
 };
 
 struct mldParams {
-    uint32_t No;
+    uint32_t No{0};
     std::vector<uint32_t> CWmins;
     std::vector<uint32_t> CWmaxs;
     std::vector<uint32_t> Aifsns;
@@ -131,8 +132,38 @@ struct mldParams {
     std::vector<uint32_t> AmpduSizes;
     std::vector<uint32_t> MaxSlrcs;
     std::vector<uint32_t> MaxSsrcs;
-    std::vector<uint32_t> RedundancyThresholds;
+    std::vector<double> RedundancyThresholds;
     std::vector<uint32_t> RedundancyFixedNumbers;
+    void print() const {
+        if (this->No == 0) {
+            std::cout << "No is 0 \n";
+            return;
+        }
+        std::cout << "No: " << No << "\n";
+        printVector("CWmins", CWmins);
+        printVector("CWmaxs", CWmaxs);
+        printVector("Aifsns", Aifsns);
+        printVector("RTS_CTS", RTS_CTS);
+        printVector("TxopLimits", TxopLimits);
+        printVector("AmpduSizes", AmpduSizes);
+        printVector("MaxSlrcs", MaxSlrcs); 
+        printVector("MaxSsrcs", MaxSsrcs);  
+        printVector("RedundancyThresholds", RedundancyThresholds);
+        printVector("RedundancyFixedNumbers", RedundancyFixedNumbers);
+    }
+
+    template <typename T>
+    void printVector(const std::string& name, const std::vector<T>& vec) const {
+        std::cout << name << ": ";
+        if (vec.empty()) {
+            std::cout << "null";
+        } else {
+            for (const auto& val : vec) {
+                std::cout << val << " ";
+            }
+        }
+        std::cout << "\n";
+    }
 };
 
 class GridSearch : public Object
@@ -142,44 +173,39 @@ class GridSearch : public Object
             std::ifstream infile(ParamsJsonFilePath);
             nlohmann::json J;
             infile >> J;
-            std::vector<uint32_t> CWmin = J["CWmin"];
-            std::vector<uint32_t> Aifsn = J["Aifsn"];
-            std::vector<uint32_t> RTS_CTS = J["RTS/CTS"];
-            std::vector<uint32_t> TxopLimit = J["TxopLimits"];
-            std::vector<uint32_t> AmpduSize = J["AmpduSize"];
-            std::vector<uint32_t> RedundancyThreshold = J["RedundancyThreshold"];
-            std::vector<uint32_t> RedundancyFixedNumber = J["RedundancyFixedNumber"];
-            std::vector<uint32_t> MaxSlrc = J["MaxSlrc"];
-            std::vector<uint32_t> MaxSsrc = J["MaxSsrc"];
             m_index = 0;
             int i = 0;
-            mldParams params;
-            uint32_t cw1 = CWmin[0];
-            params.CWmins = {CWmin[0], CWmin[1]};
-            uint32_t cw2 = 1023;
-            if (cw1 == 1) cw2 = 3;
-            else if (cw1 == 3) cw2 = 7;
-            else if (cw1 == 7) cw2 = 15;
-            else if (cw1 == 15) cw2 = 1023;
-            params.No = (++i);
-            params.CWmaxs = {cw2, cw2};
-            params.Aifsns = {Aifsn[0], Aifsn[1]};
-            params.RTS_CTS = {RTS_CTS[0], RTS_CTS[1]};
-            params.TxopLimits = {TxopLimit[0], TxopLimit[1]};
-            params.MaxSlrcs = {MaxSlrc[0], MaxSlrc[1]};
-            params.MaxSsrcs = {MaxSsrc[0], MaxSsrc[1]};
-            params.AmpduSizes = {AmpduSize[0], AmpduSize[1]};
-            params.RedundancyFixedNumbers = {RedundancyFixedNumber[0], RedundancyFixedNumber[1]};
-            params.RedundancyThresholds = {RedundancyThreshold[0], RedundancyThreshold[1]};
-            m_combinations.push_back(params);
+            for (const auto & param : J["params"]) {
+                std::vector<uint32_t> CWmins = param["CWmins"];
+                std::vector<uint32_t> CWmaxs = param["CWmaxs"];
+                std::vector<uint32_t> Aifsns = param["Aifsns"];
+                std::vector<uint32_t> RTS_CTS = param["RTS/CTS"];
+                std::vector<uint32_t> TxopLimits = param["TxopLimits"];
+                std::vector<uint32_t> AmpduSize = param["AmpduSize"];
+                std::vector<double> RedundancyThresholds = param["RedundancyThreshold"];
+                std::vector<uint32_t> RedundancyFixedNumbers = param["RedundancyFixedNumber"];
+                std::vector<uint32_t> MaxSlrc = param["MaxSlrc"];
+                std::vector<uint32_t> MaxSsrc = param["MaxSsrc"];
+                mldParams params;
+                params.No = (++i);
+                params.CWmins = CWmins;
+                params.CWmaxs = CWmaxs;
+                params.Aifsns = Aifsns;
+                params.RTS_CTS = RTS_CTS;
+                params.TxopLimits = TxopLimits;
+                params.MaxSlrcs = MaxSlrc;
+                params.MaxSsrcs = MaxSsrc;
+                params.AmpduSizes = AmpduSize;
+                params.RedundancyFixedNumbers = RedundancyFixedNumbers;
+                params.RedundancyThresholds = RedundancyThresholds;
+                m_combinations.push_back(params);
+            }
             m_size = m_combinations.size();
             std::cout << "Size of Params: " << m_size << std::endl;
         }
     
-        const mldParams GetNext() {
+        mldParams GetNext() {
             mldParams & params = m_combinations[m_index];
-            // std::cout << m_index << ":\n";
-            // print(params);
             m_index = (m_index + 1) % m_combinations.size();
             return params;
         }
@@ -192,25 +218,6 @@ class GridSearch : public Object
             return (m_index + m_combinations.size() - 1) % m_combinations.size();
         }
 
-        void print(const mldParams & params) {
-            std::cout  << "CWmins: ";
-            for(const auto &i : params.CWmins) std::cout  << i << " ";
-            std::cout  << "\nCWmaxs: ";
-            for(const auto &i : params.CWmaxs) std::cout  << i << " ";
-            std::cout  << "\nAifsns: ";
-            for(const auto &i : params.Aifsns) std::cout  << i << " ";
-            std::cout  << "\nRTS_CTS: ";
-            for(const auto &i : params.RTS_CTS) std::cout  << i << " ";
-            std::cout  << "\nTxopLimits: ";
-            for(const auto &i : params.TxopLimits) std::cout  << i << " ";
-            std::cout  << "\nAmpduSizes: ";
-            for(const auto &i : params.AmpduSizes) std::cout  << i << " ";
-            std::cout  << "\nRedundancyThresholds: ";
-            for(const auto &i : params.RedundancyThresholds) std::cout  << i << " ";
-            std::cout  << "\nRedundancyFixedNumber: ";
-            for(const auto &i : params.RedundancyFixedNumbers) std::cout  << i << " ";
-            std::cout  << "\n";
-        }
     private:
         std::vector<mldParams> m_combinations;
         uint32_t m_index;
@@ -288,23 +295,23 @@ public:
      * 
      * cwmin, cwmax, txoplimits, aifsns, rts_cts, ampdusize
      */
-    std::unordered_map<std::string, std::vector<uint32_t>> GetNextEdcaParameters();
+    mldParams GetNextEdcaParameters();
 
-    std::unordered_map<std::string, std::vector<uint32_t>> GetCurrentEdcaParameters();
+    mldParams GetCurrentEdcaParameters();
 
     bool IsGridSearchEnabled();
 
     bool IsParamUpdateEnabled();
 
-    void UpdateRedundancyThreshold(std::vector<uint32_t> const thresholds);
+    void UpdateRedundancyThreshold(const std::vector<double> thresholds);
 
-    void UpdateRedundancyFixedNumber(uint32_t const n);
+    void UpdateRedundancyFixedNumber(const std::vector<uint32_t> n);
 
     void EnableGridSearch(std::string filename);
      
     void EnableParamUpdate();
 
-    std::unordered_map<std::string, std::vector<uint32_t>> GetNewEdcaParameters();
+    mldParams GetNewEdcaParameters(bool initial);
     
     std::pair<uint8_t, Time> GetNewLinkStates();
 
@@ -333,8 +340,8 @@ public:
     friend class QueueStats;
     std::vector<uint32_t> m_maxRedundantPackets; // 最大冗余包数量
     std::vector<uint32_t> m_RedundantPacketCnt;
-    std::vector<uint32_t> m_redundancyThreshold;
-    uint32_t m_redundancyFixedNumber;
+    std::vector<double> m_redundancyThreshold;
+    std::vector<uint32_t> m_redundancyFixedNumber;
 
     std::unordered_map<uint8_t, std::vector<std::pair<Time, double>>> m_blockrateList; // 卡窗强度统计
 
@@ -379,7 +386,7 @@ private:
     Ptr<GridSearch> m_gs; // 用于周期性搜索最优参数
     bool m_gs_enable; // 是否开启最优参数搜索
     bool m_param_update;
-    std::unordered_map<std::string, std::vector<uint32_t>> m_current_params;
+    mldParams m_current_params;
 
 };
 

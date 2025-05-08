@@ -471,7 +471,7 @@ BlockAckManager::NotifyGotBlockAck(uint8_t linkId,
     NS_ASSERT(blockAck.IsCompressed() || blockAck.IsExtendedCompressed() || blockAck.IsMultiSta());
     Time now = Simulator::Now();
     std::list<Ptr<const WifiMpdu>> acked;
-    // if (Simulator::Now() > Seconds(1.34)) {
+    // if (Simulator::Now() > Seconds(1)) {
     //     std::cout << "Got Block Ack on Link " << (uint32_t)linkId << " " << recipient << std::endl;
     //     blockAck.Print(std::cout);
     //     std::cout << "队列 " << (it->second.second.begin() == it->second.second.end()) << std::endl;

@@ -989,6 +989,13 @@ QosTxop::ScheduleUpdateEdcaParameters(Time period)
     if (!(m_mode & 0x03) || m_mac->GetNLinks() < 2 || m_ac != AC_BE)
         return;
     if (Simulator::Now() <= Seconds(1)) {
+        if (GetMsduGrouper()->IsGridSearchEnabled()) {
+            auto next_params = GetMsduGrouper()->GetNextEdcaParameters(); // 设置默认参数，params.json中第一个参数
+            SetParams(next_params);
+        } else {
+            auto params = GetMsduGrouper()->GetNewEdcaParameters(true);
+            SetParams(params);
+        }
         Simulator::Schedule(period, &QosTxop::ScheduleUpdateEdcaParameters, this, period);
         return;
     }
@@ -1030,39 +1037,15 @@ QosTxop::ScheduleUpdateEdcaParameters(Time period)
     std::cout << "meanAmpduLength: " << meanlen1 << ", " << meanlen2 << std::endl;
 
     if (GetMsduGrouper()->IsGridSearchEnabled()) { // 网格搜索最优参数，场景需固定
-        std::unordered_map<std::string, std::vector<uint32_t>> params = GetMsduGrouper()->GetCurrentEdcaParameters();
-        std::unordered_map<std::string, std::vector<uint32_t>> next_params = GetMsduGrouper()->GetNextEdcaParameters();
+        auto params = GetMsduGrouper()->GetCurrentEdcaParameters();
+        auto next_params = GetMsduGrouper()->GetNextEdcaParameters();
         const auto meanTxopTime = GetMsduGrouper()->GetMeanTxopTime(period / 2);
         const auto meanTxopMpduNum = GetMsduGrouper()->GetMeanTxopMpduNum(period / 2);
-        uint32_t txoplimit = 0;
-        uint16_t winSize = 256;
-        txoplimit = winSize / (p1 * avgdatarate1 / 3006 + p2 * avgdatarate2 / 3006) / 32;
-        std::cout << meanTxopTime[0] << " , " << meanTxopTime[1] << std::endl;
-        std::cout << meanTxopMpduNum[0] << " , " << meanTxopMpduNum[1] << std::endl;
-        std::vector<double> txoptime_permpdu = {(double) meanTxopTime[0] / (meanTxopMpduNum[0] + 1e-6), (double) meanTxopTime[1] / (meanTxopMpduNum[1] + 1e-6)};
-        uint32_t txoplimit2 = ceil(winSize / (p1 / (txoptime_permpdu[0] + 1e-6) + p2 / (txoptime_permpdu[1] + 1e-6))) / 32;
-        std::cout << "Set Txoplimit: " << txoplimit << ", " << txoplimit2 << std::endl;
-        next_params["TxopLimits"] = {0, 0};
-        if (params.empty()) {
-            params["No"] = {0};
-            params["CWmins"] = GetMinCws();
-            params["CWmaxs"] = GetMaxCws();
-            auto txoplimits = GetTxopLimits();
-            std::transform(txoplimits.begin(), txoplimits.end(), std::back_inserter(params["TxopLimits"]), [](const ns3::Time& t) { return t.GetMicroSeconds();});
-            auto aifsns = GetAifsns();
-            params["Aifsns"] = {(uint32_t)aifsns[0], (uint32_t)aifsns[1]};
-            params["AmpduSizes"] = {m_mac->GetMaxAmpduSize(m_ac)};
-            params["RTS_CTS"] = {0, 0};
-            auto tmp1 = m_mac->GetWifiRemoteStationManager(0)->GetMaxSsrcAndMaxSlrcAndRtsCtsThreshold();
-            auto tmp2 = m_mac->GetWifiRemoteStationManager(1)->GetMaxSsrcAndMaxSlrcAndRtsCtsThreshold();
-            params["MaxSsrcs"] = {tmp1[0], tmp2[0]};
-            params["MaxSlrcs"] = {tmp1[1], tmp2[1]};
-            params["RedundancyThresholds"] = {50, 50};
-            params["RedundancyFixedNumbers"] = {0, 0};
-        }
+        
         if (!TracedParamsAndStats.IsEmpty())
-            TracedParamsAndStats(params,
+            TracedParamsAndStats(std::move(params),
                                  GetMsduGrouper()->GetLink1Pct(),
+                                 Simulator::Now().GetSeconds(),
                                  {Thp1, Thp2},
                                  {p1, p2},
                                  {chanrate1, chanrate2},
@@ -1075,21 +1058,44 @@ QosTxop::ScheduleUpdateEdcaParameters(Time period)
                                  meanTxopMpduNum,
                                  {maxlen1, maxlen2},
                                  {meanlen1, meanlen2});
+    
         if (!TracedTxopTime.IsEmpty())
             TracedTxopTime(GetMsduGrouper()->m_txopList, GetMsduGrouper()->m_txopNumList);
 
-        if (!next_params.size()) {
+        if (next_params.No == 0) {
             Simulator::Schedule(period, &QosTxop::ScheduleUpdateEdcaParameters, this, period);
             return;
         }
         SetParams(next_params);
         GetMsduGrouper()->ClearStats();
     } else {
-        std::unordered_map<std::string, std::vector<uint32_t>> new_params = GetMsduGrouper()->GetNewEdcaParameters();
-        if (!new_params.size()) {
+        const auto& new_params = GetMsduGrouper()->GetNewEdcaParameters(false);
+        if (new_params.No == 0) {
             Simulator::Schedule(period, &QosTxop::ScheduleUpdateEdcaParameters, this, period);
             return;
         }
+        const auto meanTxopTime = GetMsduGrouper()->GetMeanTxopTime(period / 2);
+        const auto meanTxopMpduNum = GetMsduGrouper()->GetMeanTxopMpduNum(period / 2);
+        if (!TracedParamsAndStats.IsEmpty())
+            TracedParamsAndStats(std::move(new_params),
+                                 GetMsduGrouper()->GetLink1Pct(),
+                                 Simulator::Now().GetSeconds(),
+                                 {Thp1, Thp2},
+                                 {p1, p2},
+                                 {chanrate1, chanrate2},
+                                 {avgdatarate1, avgdatarate2},
+                                 blocktimerate,
+                                 blockrate,
+                                 blockCnt,
+                                 blockCnt_other_inflight,
+                                 meanTxopTime,
+                                 meanTxopMpduNum,
+                                 {maxlen1, maxlen2},
+                                 {meanlen1, meanlen2});
+    
+        if (!TracedTxopTime.IsEmpty())
+            TracedTxopTime(GetMsduGrouper()->m_txopList, GetMsduGrouper()->m_txopNumList);
+
         SetParams(new_params);
     }
 
@@ -1124,7 +1130,7 @@ QosTxop::PrintStatsResult(Time period)
         Simulator::Schedule(period, &QosTxop::PrintStatsResult, this, period);
         return;
     }
-    std::cout << "************Time: " << Simulator::Now().GetSeconds() << "s************"
+    std::cout << "************ Time: " << Simulator::Now().GetSeconds() << "s ************"
               << std::endl;
     std::cout << "MAC ADDR: " << m_mac->GetAddress() << ": ( mode " << m_mode << "," << m_ac << ")"
               << std::endl;
@@ -1180,39 +1186,41 @@ QosTxop::PrintStatsResult(Time period)
 
 
 void 
-QosTxop::SetParams(std::unordered_map<std::string, std::vector<uint32_t>> next_params) {
+QosTxop::SetParams(const mldParams & next_params) {
     if (GetMsduGrouper() && GetMsduGrouper()->IsParamUpdateEnabled()) {
+        std::cout << "SetParams: " << std::endl;
+        next_params.print();
         // CWmin, CWmax
-        SetMinCws(next_params["CWmins"]);
-        SetMaxCws(next_params["CWmaxs"]);
+        SetMinCws(next_params.CWmins);
+        SetMaxCws(next_params.CWmaxs);
 
         // TxopLimits
-        m_alg_txop_limits = next_params["TxopLimits"];
+        m_alg_txop_limits = next_params.TxopLimits;
 
         // Aifsns
-        SetAifsns(std::vector<uint8_t>(next_params["Aifsns"].begin(), next_params["Aifsns"].end()));
+        SetAifsns(std::vector<uint8_t>(next_params.Aifsns.begin(), next_params.Aifsns.end()));
 
         // RTS/CTS 开启关闭
-        // for (uint8_t i = 0; i < 2; ++ i) {
-        //     if (next_params["RTS_CTS"][i])
-        //         m_mac->GetWifiRemoteStationManager(i)->SetRtsCtsThreshold(0);
-        //     else m_mac->GetWifiRemoteStationManager(i)->SetRtsCtsThreshold(std::numeric_limits<uint32_t>::max());
-        // }
+        for (uint8_t i = 0; i < 2; ++ i) {
+            if (next_params.RTS_CTS[i])
+                m_mac->GetWifiRemoteStationManager(i)->SetRtsCtsThreshold(0);
+            else m_mac->GetWifiRemoteStationManager(i)->SetRtsCtsThreshold(std::numeric_limits<uint32_t>::max());
+        }
 
         // 聚合参数
 
-        // m_mac->SetAttribute("BE_MaxAmpduSize", UintegerValue(65536));
+        m_mac->SetAttribute("BE_MaxAmpduSize", UintegerValue(1024 * 4 * (700 + 150)));
 
         // 重传次数
-        // for (uint8_t i = 0; i < 2; ++ i) {
-        //     m_mac->GetWifiRemoteStationManager(i)->SetMaxSlrc(next_params["MaxSlrcs"][i]); // 7
-        //     m_mac->GetWifiRemoteStationManager(i)->SetMaxSsrc(next_params["MaxSsrcs"][i]); // 4
-        // }
+        for (uint8_t i = 0; i < 2; ++ i) {
+            m_mac->GetWifiRemoteStationManager(i)->SetMaxSlrc(next_params.MaxSlrcs[i]); // 7
+            m_mac->GetWifiRemoteStationManager(i)->SetMaxSsrc(next_params.MaxSsrcs[i]); // 4
+        }
     
         // 冗余参数
-        // GetMsduGrouper()->UpdateRedundancyThreshold(next_params["RedundancyThresholds"]);
+        GetMsduGrouper()->UpdateRedundancyThreshold(next_params.RedundancyThresholds);
 
-        // GetMsduGrouper()->UpdateRedundancyFixedNumber(next_params["RedundancyFixedNumbers"][0]);
+        GetMsduGrouper()->UpdateRedundancyFixedNumber(next_params.RedundancyFixedNumbers);
     }
 }
 } // namespace ns3

@@ -9,22 +9,22 @@ df = pd.read_csv("PPDU.csv")
 color_map = {
     '0': '#1f77b4',      # 蓝色
     '1': '#2ca02c',      # 绿色
-    'OBSS2G': '#ff7f0e',   # 橙色
-    'OBSS5G': '#dcd38e',   # 黄色
+    'OBSS1': '#ff7f0e',   # 橙色
+    'OBSS2': '#ffd700',   # 黄色
 }
 
 def get_y(type_):
-    if type_ == '1' or type_ == 'OBSS5G':
+    if type_ == '1' or type_ == 'OBSS2':
         return 1
-    elif type_ == '0' or type_ == 'OBSS2G':
+    elif type_ == '0' or type_ == 'OBSS1':
         return 0
     else:
         return 0
         
 
-fig, ax = plt.subplots(figsize=(20, 4))
+fig, ax = plt.subplots(figsize=(30, 4))
 
-begin = 1500000
+begin = 1550000
 end = 1600000
 for idx, row in df.iterrows():
     linkId = str(row.iloc[0])
@@ -58,7 +58,7 @@ for idx, row in df.iterrows():
 
 # 设置y轴
 ax.set_yticks([0, 1])
-ax.set_yticklabels(['2.4 G & OBSS', '5 G'])
+ax.set_yticklabels(['2.4 G & OBSS', '5 G & OBSS'])
 ax.set_xlabel('Time')
 ax.set_ylabel('Type')
 ax.set_title('PPDU Timeline')
@@ -67,8 +67,8 @@ from matplotlib.patches import Patch
 legend_elements = [
     Patch(facecolor=color_map['0'], edgecolor='black', label='2.4 G'),
     Patch(facecolor=color_map['1'], edgecolor='black', label='5 G'),
-    Patch(facecolor=color_map['OBSS2G'], edgecolor='black', label='OBSS 2G'),
-    Patch(facecolor=color_map['OBSS5G'], edgecolor='black', label='OBSS 5G'),
+    Patch(facecolor=color_map['OBSS1'], edgecolor='black', label='OBSS 2G'),
+    Patch(facecolor=color_map['OBSS2'], edgecolor='black', label='OBSS 5G'),
     Patch(facecolor='purple', edgecolor='black', label='link0 txop'),
     Patch(facecolor='red', edgecolor='black', label='link1 txop'),
 ]

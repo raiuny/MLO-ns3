@@ -1,11 +1,26 @@
 {
-    "CWmin": [1,1],
-    "Aifsn": [2,2],
-    "RTS/CTS": [0,0],
-    "TxopLimits": [124, 124],
-    "AmpduSize": [0,0],
-    "MaxSlrc": [4,4],
-    "MaxSsrc": [7,7],
-    "RedundancyThreshold": [100,100],
-    "RedundancyFixedNumber": [0,0]
+   "params": [{
+        "CWmins": [1,1],
+        "CWmaxs": [3,3],
+        "Aifsns": [2,2],
+        "RTS/CTS": [0,0],
+        "TxopLimits": [0, 0],
+        "AmpduSize": [0, 0],
+        "MaxSlrc": [4294967295, 4294967295],
+        "MaxSsrc": [4294967295, 4294967295],
+        "RedundancyThreshold": [0.5, 0.5],
+        "RedundancyFixedNumber": [0, 0]
+   }, {
+        "CWmins": [1,1],
+        "CWmaxs": [3,3],
+        "Aifsns": [2,2],
+        "RTS/CTS": [0,0],
+        "TxopLimits": [42, 42],
+        "AmpduSize": [0,0],
+        "MaxSlrc": [4294967295, 4294967295],
+        "MaxSsrc": [4294967295, 4294967295],
+        "RedundancyThreshold": [0.5, 0.5],
+        "RedundancyFixedNumber": [0, 0]
+   }
+   ]
 }

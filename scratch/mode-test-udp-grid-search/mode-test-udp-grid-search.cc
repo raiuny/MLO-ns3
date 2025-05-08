@@ -89,9 +89,7 @@ struct Stats {
 
 std::vector<Stats> results;
 std::deque<uint32_t> throughputQueue;
-std::unordered_map<double, double> throughputMap;
-// std::unordered_map<double, std::pair<int, double>> blockinfoMap;
-
+std::map<double, double> throughputMap;
 int cnt = 0;
 
 void
@@ -294,7 +292,7 @@ main(int argc, char* argv[])
     uint32_t mcs2 = 11;
     uint32_t bw1 = 20;
     uint32_t bw2 = 160;
-    double r1 = 0.5;
+    double r1 = 0.8;
     double r2 = 0.5;
     uint32_t ch1 = 0;
     uint32_t ch2 = 0;
@@ -303,15 +301,15 @@ main(int argc, char* argv[])
 
     uint16_t mpduBufferSize{256};
     uint32_t maxAmpduSize{1024 * 4 * (700 + 150)}; // 1048575
-    uint32_t maxAmpduSize1{32 * (700 + 150)};
-    uint32_t maxAmpduSize2{32 * (700 + 150)}; // payload = 700
+    uint32_t maxAmpduSize1{4 * (700 + 150)};
+    uint32_t maxAmpduSize2{4 * (700 + 150)}; // payload = 700
 
     uint32_t txoplimit1 = 0, txoplimit2 = 0;
     uint32_t singleLink = 0;
     uint32_t inference = 0b00;
-    double period_update = 0.1;
-    bool grid_search_enable = false;
-    uint32_t nss = 2;
+    double period_update = 0.2;
+    bool grid_search_enable = true;
+    uint32_t nss = 1;
     uint8_t mode = 1;
 
     double simT = 0;
@@ -343,7 +341,7 @@ main(int argc, char* argv[])
     cmd.AddValue("inference", "inference setting", inference);
     cmd.Parse(argc, argv);
 
-    simT = period_update * 10 + 1;
+    simT = period_update * 1 + 1;
     Time period{Seconds(period_update)};
     if (!(inference & 0b01)) r1 = 1e-9;  
     if (!(inference & 0b10)) r2 = 1e-9;
@@ -351,7 +349,7 @@ main(int argc, char* argv[])
     std::string title = "bw_" + std::to_string(bw1) + "_" + std::to_string(bw2) + "_mcs_" +
                         std::to_string(mcs1) + "_" + std::to_string(mcs2) + "_interference_" +
                         std::to_string(r1) + "_" + std::to_string(r2) + "_txoplimits_" + 
-                        std::to_string(txoplimit1) + "_" + std::to_string(txoplimit2) + "_nss_" + std::to_string(nss);
+                        std::to_string(txoplimit1) + "_" + std::to_string(txoplimit2);
 
     std::string csv_file = (filepath.parent_path() / ("result_" + title + "_thpt.csv")).string();
     std::cout << csv_file << std::endl;
@@ -360,7 +358,7 @@ main(int argc, char* argv[])
     uint8_t nLinks = 2;
     RngSeedManager::SetSeed(seedNumber);
     RngSeedManager::SetRun(seedNumber);
-    double txPower = 20; 
+    double txPower = 16; 
     bool useRts{false};
 
     int gi = 800;
@@ -548,8 +546,9 @@ main(int argc, char* argv[])
     Ssid obssSsid5 = Ssid("AP-5G");
     // 1. MLO BSS 设置
     // MLD AP0
-    uint64_t beaconInterval = 100 * 1024;
-    // uint64_t beaconInterval = std::min<uint64_t>((ceil((simT * 1000000) / 1024) * 1024), (65535 * 1024));
+    // uint64_t beaconInterval = 100 * 1024;
+    uint64_t beaconInterval =
+        std::min<uint64_t>((ceil((simT * 1000000) / 1024) * 1024), (65535 * 1024));
 
     mac.SetType("ns3::ApWifiMac",
                 "BeaconInterval",
@@ -716,7 +715,7 @@ main(int argc, char* argv[])
         sldNodeInterface5 = address.Assign(sldDev5);
         std::cout << "AP2 IP: " << apNodeInterface5.GetAddress(0) << std::endl;
         for (size_t i = 0; i < nStaSlds[1];  ++i) {
-            std::cout << " 5 G SLD-" << std::to_string(i) + ": " << sldNodeInterface5.GetAddress(i) << std::endl;
+            std::cout << "  Link 1 SLD-" << std::to_string(i) + ": " << sldNodeInterface5.GetAddress(i) << std::endl;
         }
     }
 
@@ -779,6 +778,7 @@ main(int argc, char* argv[])
     if (inference & 0b10) {
         auto packetInterval5 = payloadSize * 8.0 / (maxLoad5 * r2);
         UdpClientHelper client2(sldNodeInterface5.GetAddress(0), port);
+        // client2.SetAttribute("MaxPackets", UintegerValue(0));
         client2.SetAttribute("MaxPackets", UintegerValue(0));
         client2.SetAttribute("Interval", TimeValue(Seconds(packetInterval5)));
         client2.SetAttribute("PacketSize", UintegerValue(payloadSize));
@@ -826,12 +826,12 @@ main(int argc, char* argv[])
     Config::Set("/NodeList/0/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MinCws", AttributeContainerValue<UintegerValue>(std::list<int>{1,1}));
     Config::Set("/NodeList/0/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MaxCws", AttributeContainerValue<UintegerValue>(std::list<int>{3,3}));
     /* OBSS EDCA */
-    //  Config::Set("/NodeList/1/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/Aifsns", AttributeContainerValue<UintegerValue>(std::list<uint64_t>{2}));
-    //  Config::Set("/NodeList/2/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/Aifsns", AttributeContainerValue<UintegerValue>(std::list<uint64_t>{2}));
-    //  Config::Set("/NodeList/1/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MinCws", AttributeContainerValue<UintegerValue>(std::list<int>{1}));
-    //  Config::Set("/NodeList/2/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MinCws", AttributeContainerValue<UintegerValue>(std::list<int>{1}));
-    //  Config::Set("/NodeList/1/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MaxCws", AttributeContainerValue<UintegerValue>(std::list<int>{3}));
-    //  Config::Set("/NodeList/2/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MaxCws", AttributeContainerValue<UintegerValue>(std::list<int>{3}));
+     Config::Set("/NodeList/1/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/Aifsns", AttributeContainerValue<UintegerValue>(std::list<uint64_t>{2}));
+     Config::Set("/NodeList/2/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/Aifsns", AttributeContainerValue<UintegerValue>(std::list<uint64_t>{2}));
+     Config::Set("/NodeList/1/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MinCws", AttributeContainerValue<UintegerValue>(std::list<int>{1}));
+     Config::Set("/NodeList/2/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MinCws", AttributeContainerValue<UintegerValue>(std::list<int>{1}));
+     Config::Set("/NodeList/1/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MaxCws", AttributeContainerValue<UintegerValue>(std::list<int>{3}));
+     Config::Set("/NodeList/2/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MaxCws", AttributeContainerValue<UintegerValue>(std::list<int>{3}));
 
     
     // /* BSS EDCA */
@@ -839,12 +839,12 @@ main(int argc, char* argv[])
     // Config::Set("/NodeList/0/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MinCws", AttributeContainerValue<UintegerValue>(std::list<int>{15,15}));
     // Config::Set("/NodeList/0/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MaxCws", AttributeContainerValue<UintegerValue>(std::list<int>{1023,1023}));
     /* OBSS EDCA */
-    Config::Set("/NodeList/1/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/Aifsns", AttributeContainerValue<UintegerValue>(std::list<uint64_t>{2}));
-    Config::Set("/NodeList/2/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/Aifsns", AttributeContainerValue<UintegerValue>(std::list<uint64_t>{2}));
-    Config::Set("/NodeList/1/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MinCws", AttributeContainerValue<UintegerValue>(std::list<int>{15}));
-    Config::Set("/NodeList/2/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MinCws", AttributeContainerValue<UintegerValue>(std::list<int>{15}));
-    Config::Set("/NodeList/1/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MaxCws", AttributeContainerValue<UintegerValue>(std::list<int>{1023}));
-    Config::Set("/NodeList/2/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MaxCws", AttributeContainerValue<UintegerValue>(std::list<int>{1023}));
+    // Config::Set("/NodeList/1/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/Aifsns", AttributeContainerValue<UintegerValue>(std::list<uint64_t>{2}));
+    // Config::Set("/NodeList/2/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/Aifsns", AttributeContainerValue<UintegerValue>(std::list<uint64_t>{2}));
+    // Config::Set("/NodeList/1/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MinCws", AttributeContainerValue<UintegerValue>(std::list<int>{15}));
+    // Config::Set("/NodeList/2/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MinCws", AttributeContainerValue<UintegerValue>(std::list<int>{15}));
+    // Config::Set("/NodeList/1/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MaxCws", AttributeContainerValue<UintegerValue>(std::list<int>{1023}));
+    // Config::Set("/NodeList/2/DeviceList/*/$ns3::WifiNetDevice/Mac/BE_Txop/MaxCws", AttributeContainerValue<UintegerValue>(std::list<int>{1023}));
 
     std::cout << "TxopLimits : (" << txoplimit1 << "," << txoplimit2  << ")" << std::endl;
     std::vector<Time> txopLimitList = {MicroSeconds(32) * txoplimit1, MicroSeconds(32) * txoplimit2};
@@ -908,7 +908,7 @@ main(int argc, char* argv[])
         }
         fout.close();
     }
-    
+
     std::cout << "No, Time, Mode, CWmin1, CWmax1, CWmin2, CWmax2, Aifsn1, Aifsn2, TxopLimit1, TxopLimit2, RTS_CTS1, RTS_CTS2, MaxSlrc1, "
             "MaxSsrc1, MaxSlrc2, MaxSsrc2, RedundancyThreshold1, RedundancyThreshold2, RedundancyFixedNumber1, "
             "RedundancyFixedNumber2, BlockCnt1, BlockCnt2, BlockCnt1_True, BlockCnt2_True, TxopTime1(us), TxopTime2(us), TxopCnt1, TxopCnt2, MaxAmpduLength1, MaxAmpduLength2, MeanAmpduLength1, MeanAmpduLength2, PSR1, PSR2, Occupancy Rate 1, Occupancy Rate 2, blocktimerate1, blocktimerate2, blockrate1, blockrate2, datarate1, datarate2, throughput1, throughput2, pct1, Throughput(Mbps)" << std::endl;
